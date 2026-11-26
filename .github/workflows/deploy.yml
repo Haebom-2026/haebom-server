@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       environment:
-        description: dev | prod
+        description: GitHub environment 이름 (현재 prod 만 사용)
         required: true
         type: string
 

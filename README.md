@@ -44,13 +44,13 @@ terraform -chdir=infra/bootstrap init
 terraform -chdir=infra/bootstrap apply
 ```
 
-출력값: `state_bucket`, `plan_role_arn`, `deploy_role_arns`.
+출력값: `state_bucket`, `plan_role_arn`, `deploy_role_arns` (prod만).
 
-### 2. GitHub 설정
+### 2. GitHub 설정 (prod 배포용)
 
 - Repository variables: `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`
-- Environments `dev`, `prod` 생성, 각 environment variable `AWS_DEPLOY_ROLE_ARN` (bootstrap 출력의 환경별 값)
-- `prod` environment에 Required reviewers 지정 (prod 배포 승인)
+- Environment `prod` 생성, environment variable `AWS_DEPLOY_ROLE_ARN` (bootstrap 출력의 prod 값)
+- (선택) `prod` environment에 Required reviewers를 지정하면 main 머지 후 승인해야 배포된다
 
 ### 3. Firebase 프로젝트 ID
 
@@ -72,18 +72,23 @@ prod도 `haebom-prod/...` 로 같게 등록한다.
 
 ## 배포 흐름
 
-| 이벤트    | 동작                                                      |
-| --------- | --------------------------------------------------------- |
-| PR        | 검사 + dev `terraform plan` (결과는 job summary)          |
-| main push | 검사 → dev `apply` → `/v1/healthz` 확인                   |
-| `v*` 태그 | 검사 → prod 승인 대기 → prod `apply` → `/v1/healthz` 확인 |
+| 환경 | 방법                                                               |
+| ---- | ------------------------------------------------------------------ |
+| dev  | **로컬**에서 `npm run dev:plan` / `npm run dev:apply`              |
+| prod | **GitHub**: main에 머지 → 검사 → prod `apply` → `/v1/healthz` 확인 |
 
-로컬에서 직접 plan 할 때:
+PR을 올리면 검사와 함께 prod `terraform plan` 결과가 job summary에 남는다.
+
+### dev 로컬 배포
+
+현재 AWS 자격 증명(`AWS_PROFILE` 등)으로 실행한다. 빌드 → `terraform init`(state 버킷은 계정 ID로 자동 계산) → plan/apply까지 한 번에 한다. apply는 Terraform이 변경 내용을 보여 주고 `yes` 입력을 받는다.
 
 ```bash
-npm run build && terraform -chdir=infra/envs/dev init -backend-config="bucket=haebom-tfstate-<account_id>"
+npm run dev:plan
 ```
 
 ```bash
-terraform -chdir=infra/envs/dev plan
+npm run dev:apply
 ```
+
+apply가 끝나면 `/v1/healthz`를 호출해 확인한다. 배포 버전은 git 커밋 해시이고, 커밋하지 않은 변경이 있으면 `-dirty`가 붙는다. 지울 때는 `npm run dev:destroy`.

@@ -1,6 +1,8 @@
 # 역할 구성
 #   haebom-gha-plan        : PR 에서 terraform plan (읽기 전용 + state 잠금 파일)
 #   haebom-gha-deploy-<env>: GitHub environment "<env>" 에서만 assume, haebom-<env>-* 리소스만 변경
+#                            github_deploy_environments 기본값은 prod 만 (dev 는 로컬 배포)
+#                            (github_deploy_environments, 기본 prod 만. dev 는 로컬 배포)
 
 locals {
   repo_sub_prefix = "repo:${var.github_repository}"
@@ -70,7 +72,7 @@ resource "aws_iam_role_policy" "plan_state" {
 # ---------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "deploy_trust" {
-  for_each = var.environments
+  for_each = var.github_deploy_environments
 
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -92,7 +94,7 @@ data "aws_iam_policy_document" "deploy_trust" {
 }
 
 data "aws_iam_policy_document" "deploy" {
-  for_each = var.environments
+  for_each = var.github_deploy_environments
 
   # state: 자기 환경 키만
   statement {
@@ -246,7 +248,7 @@ data "aws_iam_policy_document" "deploy" {
 }
 
 resource "aws_iam_role" "deploy" {
-  for_each = var.environments
+  for_each = var.github_deploy_environments
 
   name                 = "haebom-gha-deploy-${each.key}"
   assume_role_policy   = data.aws_iam_policy_document.deploy_trust[each.key].json
@@ -254,7 +256,7 @@ resource "aws_iam_role" "deploy" {
 }
 
 resource "aws_iam_role_policy" "deploy" {
-  for_each = var.environments
+  for_each = var.github_deploy_environments
 
   name   = "terraform-deploy"
   role   = aws_iam_role.deploy[each.key].id

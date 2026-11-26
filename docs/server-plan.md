@@ -463,10 +463,15 @@ infra/
 
 ### 11.5 배포 흐름
 
+| 환경 | 배포 방법                                                                                    |
+| ---- | -------------------------------------------------------------------------------------------- |
+| dev  | **로컬**: `npm run dev:plan` / `npm run dev:apply` (빌드 → init → plan/apply → healthz 확인) |
+| prod | **GitHub Actions**: main 머지 → 검사 → apply → healthz 확인                                  |
+
 ```
-PR    : lint → test → build → terraform fmt/validate → plan (dev) 결과를 job summary에
-main  : build → terraform apply (dev) 자동
-태그  : terraform plan (prod) → 수동 승인 → apply (prod)
+PR    : lint → test → build → terraform fmt/validate → plan (prod) 결과를 job summary에
+main  : 검사 → terraform apply (prod) (GitHub environment "prod" 승인자 지정 시 승인 후)
+dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 ```
 
 - CI의 AWS 인증은 GitHub OIDC → IAM 역할 (장기 Access Key 사용 안 함). OIDC 공급자·역할도 `bootstrap/` 에서 Terraform으로 만든다.

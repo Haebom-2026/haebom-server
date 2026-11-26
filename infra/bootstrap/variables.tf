@@ -11,7 +11,18 @@ variable "github_repository" {
 }
 
 variable "environments" {
-  description = "배포 역할을 만들 환경 목록. 한 계정 안에서 이름 접두사(haebom-<env>-)로 권한을 나눈다."
+  description = "Lambda 권한 경계를 만들 환경 목록. 한 계정 안에서 이름 접두사(haebom-<env>-)로 권한을 나눈다."
   type        = set(string)
   default     = ["dev", "prod"]
+}
+
+variable "github_deploy_environments" {
+  description = "GitHub Actions 배포 역할을 만들 환경. dev 는 로컬에서 배포하므로 prod 만."
+  type        = set(string)
+  default     = ["prod"]
+
+  validation {
+    condition     = length(setsubtract(var.github_deploy_environments, var.environments)) == 0
+    error_message = "github_deploy_environments 는 environments 안의 값이어야 합니다."
+  }
 }
