@@ -12,7 +12,7 @@ import path from "node:path";
 import { parseArgs, promisify } from "node:util";
 import { createAwsDebugStore } from "../src/debug/aws-store.js";
 import { createPageMatcher } from "../src/debug/pages.js";
-import type { ScreenSummary } from "../src/debug/store.js";
+import type { DebugStore, PageRecord, ScreenSummary } from "../src/debug/store.js";
 
 const run = promisify(execFile);
 const root = path.resolve(import.meta.dirname, "..");
@@ -32,9 +32,37 @@ async function config(): Promise<{ table: string; bucket: string }> {
   return { table: debug.table_name, bucket: debug.bucket_name };
 }
 
+/** dry-run: 페이지 변경을 메모리에만 반영해 실제로 돌렸을 때와 같은 판정을 보여 준다 */
+function withMemoryPages(store: DebugStore): DebugStore {
+  const cache = new Map<string, PageRecord[]>();
+  const pagesOf = async (pkg: string) => {
+    let pages = cache.get(pkg);
+    if (!pages) {
+      pages = await store.listPages(pkg);
+      cache.set(pkg, pages);
+    }
+    return pages;
+  };
+  return {
+    ...store,
+    listPages: async (pkg) => structuredClone(await pagesOf(pkg)),
+    createPage: async (page) => {
+      (await pagesOf(page.pkg)).push(structuredClone(page));
+    },
+    touchPage: async (pkg, pageId, { fingerprint, tokens, at }) => {
+      const page = (await pagesOf(pkg)).find((p) => p.pageId === pageId);
+      if (!page) return;
+      if (!page.fingerprints.includes(fingerprint)) page.fingerprints.push(fingerprint);
+      page.lastTokens = tokens;
+      page.lastSeenAt = at;
+      page.screenCount += 1;
+    },
+  };
+}
+
 async function main() {
   const store = createAwsDebugStore(await config());
-  const matcher = createPageMatcher(store);
+  const matcher = createPageMatcher(args["dry-run"] ? withMemoryPages(store) : store);
 
   const summaries: ScreenSummary[] = [];
   for (const device of await store.listDevices()) {
@@ -63,7 +91,10 @@ async function main() {
       at: doc.receivedAt,
     });
     counts[prepared.match.kind] = (counts[prepared.match.kind] ?? 0) + 1;
-    if (args["dry-run"]) continue;
+    if (args["dry-run"]) {
+      await prepared.commit();
+      continue;
+    }
     await store.setScreenMatch(doc.deviceId, doc.screenId, prepared.match);
     await prepared.commit();
   }
