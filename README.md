@@ -51,6 +51,7 @@ terraform -chdir=infra/bootstrap apply
 - Repository variables: `TF_STATE_BUCKET`, `AWS_PLAN_ROLE_ARN`
 - Environment `prod` 생성, environment variable `AWS_DEPLOY_ROLE_ARN` (bootstrap 출력의 prod 값)
 - (선택) `prod` environment에 Required reviewers를 지정하면 main 머지 후 승인해야 배포된다
+- `TF_STATE_BUCKET`이 없으면 PR plan과 prod 배포 job은 건너뛰고 검사만 돈다. 설정하는 순간부터 main 머지 때 prod에 배포된다
 
 ### 3. Firebase 프로젝트 ID
 
