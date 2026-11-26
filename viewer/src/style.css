@@ -839,3 +839,91 @@ svg.map text.count {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* 실시간 */
+svg.map g.trail line {
+  stroke: var(--text);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+svg.map #trail-arrow path {
+  fill: var(--text);
+}
+svg.map g.pulse circle {
+  fill: none;
+  stroke: var(--target);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+svg.map g.pulse circle.ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: live-pulse 1.4s ease-out infinite;
+}
+@keyframes live-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+svg.map circle.live-runner {
+  stroke: var(--warn);
+  stroke-width: 3;
+  stroke-dasharray: 3 2;
+}
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--target);
+  margin-right: 6px;
+  animation: live-blink 1.2s ease-in-out infinite;
+}
+@keyframes live-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.live-verdict {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0 10px;
+}
+.live-verdict-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+.live-verdict.live-exact,
+.live-verdict.live-similar {
+  border-left-color: var(--ok);
+}
+.live-verdict.live-new {
+  border-left-color: var(--target);
+}
+.live-verdict.live-ambiguous {
+  border-left-color: var(--warn);
+}
+.live-recent {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.live-recent li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 0;
+  opacity: 0.7;
+}
+.live-recent li.now {
+  opacity: 1;
+  font-weight: 600;
+}
