@@ -73,6 +73,26 @@ export function isSensitiveScreen(doc: ScreenDocument | undefined): boolean {
   });
 }
 
+/**
+ * 홈 화면(런처) 패키지. 이름에 home·launcher 가 든 일반 앱(홈플러스·스마트홈 등)과 섞이지 않게 목록으로.
+ * 목록에 없는 런처는 "다른 앱"으로 본다 (지도는 Claude 로, 검토는 사람 확인으로: 안전한 쪽)
+ */
+export const LAUNCHER_PACKAGES: ReadonlySet<string> = new Set([
+  "com.sec.android.app.launcher",
+  "com.google.android.apps.nexuslauncher",
+  "com.android.launcher",
+  "com.android.launcher3",
+  "com.miui.home",
+  "com.huawei.android.launcher",
+  "com.lge.launcher2",
+  "com.lge.launcher3",
+  "com.oppo.launcher",
+  "com.oneplus.launcher",
+  "com.motorola.launcher3",
+]);
+
+export const isLauncher = (pkg: string): boolean => LAUNCHER_PACKAGES.has(pkg);
+
 /** 학습 제외 역할 (8.2): 대화·메일·메모·금융·건강 */
 const EXCLUDED_ROLES = new Set([
   "messaging",

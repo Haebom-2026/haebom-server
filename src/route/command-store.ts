@@ -73,8 +73,8 @@ export interface MapProgress {
   /** edge: 연결선 id, finish: 끝 단계 번호 */
   kind?: "edge" | "finish";
   ref?: string;
-  /** 다시 줄 응답 (같은 stepId) */
-  response?: Record<string, unknown>;
+  /** 같은 화면에서 이 안내를 다시 준 횟수 (MAX_RESENDS 넘으면 Claude) */
+  resends?: number;
   /** ai 로 넘어간 이유 */
   reason?: string;
 }

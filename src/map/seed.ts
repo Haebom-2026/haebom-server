@@ -10,7 +10,7 @@ import type { CommandRecord } from "../route/command-store.js";
 import { actionsOf, type ReviewAction, type ReviewRecord } from "../review/review.js";
 import { isSensitiveLabel, isSensitiveScreen } from "../review/safety-words.js";
 import { mapFingerprint } from "./fingerprint.js";
-import { exactLabel, nodeLabel } from "./guide.js";
+import { classOf, exactLabel, nodeLabel } from "./guide.js";
 import { edgeIdOf, type MapEdge, type MapFinishStep, type MapGoal } from "./store.js";
 
 export interface SeedInput {
@@ -32,7 +32,6 @@ export type SeedResult =
   { ok: true; edges: MapEdge[]; goal: MapGoal; warnings: string[] } | { ok: false; error: string };
 
 const MOVE_ACTIONS = new Set(["tap", "swipe_up", "swipe_down", "swipe_left", "swipe_right"]);
-const classOf = (c: string | undefined) => (c ?? "").split(".").pop() ?? "";
 const labelOf = nodeLabel;
 
 export const fpOfDoc = (doc: ScreenDocument): string =>

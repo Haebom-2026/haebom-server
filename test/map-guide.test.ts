@@ -4,7 +4,7 @@ import { createProfileGuard } from "../src/core/profile.js";
 import { createGuideTraceRecorder } from "../src/debug/guide-trace.js";
 import type { ScreenDocument } from "../src/debug/store.js";
 import { buildSeed } from "../src/map/seed.js";
-import { stepsOfCommand, type ReviewRecord } from "../src/review/review.js";
+import { actionsOf, stepsOfCommand, type ReviewRecord } from "../src/review/review.js";
 import { createGuideRoute } from "../src/functions/ai/routes/guide.js";
 import type { CommandLog, StepRecord } from "../src/route/command-log.js";
 import type { CommandStore } from "../src/route/command-store.js";
@@ -16,13 +16,14 @@ import { memoryDebugStore } from "./debug-memory-store.js";
 import { httpEvent, lambdaContext, parseBody } from "./helpers.js";
 import { guideRequestSchema, type GuideRequest } from "../src/ai/guide-schema.js";
 import { mapFingerprint } from "../src/map/fingerprint.js";
-import { decideMapStep, firstEdgeToward, objectParticle } from "../src/map/guide.js";
+import { decideMapStep, firstEdgeToward, objectParticle, pressSay } from "../src/map/guide.js";
 import {
   edgeIdOf,
   type MapEdge,
   type MapFinishStep,
   type MapGoal,
   type MapSnapshot,
+  toIdList,
 } from "../src/map/store.js";
 import type { CommandRecord, MapProgress } from "../src/route/command-store.js";
 import { parseMap } from "../src/route/map.js";
@@ -168,7 +169,7 @@ function decide(req: GuideRequest, cmd = command(), snap = snapshot()) {
 /** 앞 결정을 저장한 것처럼 진행 상태를 만든다 */
 function progressAfter(d: ReturnType<typeof decide>, stepId: string): MapProgress {
   if (d.kind !== "step") throw new Error(`expected step, got ${d.kind}`);
-  return { ...d.progress, stepId, response: { ...d.response, stepId } };
+  return { ...d.progress, stepId };
 }
 
 describe("mapFingerprint", () => {
@@ -432,6 +433,86 @@ describe("decideMapStep", () => {
     });
   });
 
+  it("안내와 다른 것을 눌렀으면 같은 행동 종류여도 Claude", () => {
+    const p = progressAfter(decide(request("home")), "s1");
+    const d = decide(
+      request("settings", { stepId: "s1", seq: 0, action: "tap", text: "카메라" }),
+      command({ mapProgress: p }),
+    );
+    expect(d).toMatchObject({ kind: "ai", reason: "different-target" });
+  });
+
+  it("같은 안내는 두 번까지만 다시 준다", () => {
+    const p = progressAfter(decide(request("home")), "s1");
+    expect(decide(request("home"), command({ mapProgress: p }))).toMatchObject({
+      kind: "resend",
+      resends: 1,
+    });
+    expect(decide(request("home"), command({ mapProgress: { ...p, resends: 2 } }))).toMatchObject({
+      kind: "ai",
+      reason: "resend-limit",
+    });
+  });
+
+  it("진행 상태 없이 앞 안내가 있던 명령은 지도가 끼지 않는다", () => {
+    expect(
+      decide(request("home", { stepId: "sAi", seq: 0, action: "tap", text: "x" })),
+    ).toMatchObject({
+      kind: "ai",
+      reason: "claude-started",
+    });
+    const withHistory = guideRequestSchema.parse({
+      ...request("home"),
+      history: ["설정을 눌러 주세요."],
+    });
+    expect(decide(withHistory)).toMatchObject({ reason: "claude-started" });
+  });
+
+  it("끝난 명령은 다른 이유보다 먼저, 쓰지 않는다", () => {
+    expect(decide(request("home"), command({ endResult: "done", level: "L3" }))).toEqual({
+      kind: "ai",
+      reason: "ended",
+      persist: false,
+    });
+  });
+
+  it("이름에 home 이 든 일반 앱은 런처가 아니다", () => {
+    const req = request("home");
+    const other = guideRequestSchema.parse({
+      ...req,
+      screen: { ...req.screen, pkg: "com.homeplus.app" },
+    });
+    expect(decide(other)).toMatchObject({ kind: "ai", reason: "other-app" });
+  });
+
+  it("밀기 끝 단계는 밀 곳이 하나뿐이면 가리킨다", () => {
+    const bar = { i: 9, d: "밝기 막대 80%", c: "android.widget.SeekBar", b: [50, 900, 950, 1000] };
+    const req = guideRequestSchema.parse({
+      ...request("display"),
+      screen: { ...request("display").screen, nodes: [...screens.display.nodes, bar] },
+    });
+    const { fp } = fpOf(req);
+    const goal = {
+      ...GOAL,
+      arriveFps: [fp],
+      finish: [
+        {
+          action: "swipe_left",
+          targetText: "밝기 막대 80%",
+          targetClass: "",
+          verify: "node_state",
+          sensitive: false,
+        },
+      ] as MapFinishStep[],
+    };
+    expect(
+      decide(req, command(), snapshot({ goals: new Map([[GOAL.goalId, goal]]) })),
+    ).toMatchObject({
+      kind: "step",
+      response: { type: "swipe", dir: "left", target: 9, targetText: "밝기 막대 80%" },
+    });
+  });
+
   it("꺼진 버튼은 Claude", () => {
     const req = request("home");
     const nodes = req.screen.nodes.map((n) => (n.i === 0 ? { ...n, enabled: false } : n));
@@ -458,6 +539,39 @@ describe("firstEdgeToward", () => {
       shortcut.edgeId,
     );
     expect(firstEdgeToward(FP.display, new Set([FP.home]), [E1, E2])).toBeUndefined();
+  });
+});
+
+describe("pressSay·toIdList·actionsOf", () => {
+  it("긴 글자는 줄이고 '눌러 주세요'는 남긴다", () => {
+    const say = pressSay("가".repeat(100));
+    expect(say.length).toBeLessThanOrEqual(80);
+    expect(say.endsWith("눌러 주세요.")).toBe(true);
+    expect(say).toContain("…");
+  });
+
+  it("차단 목록은 없음·String Set·섞인 값도 문자열 배열로", () => {
+    expect(toIdList(undefined)).toEqual([]);
+    expect(toIdList(new Set(["a", "b"]))).toEqual(["a", "b"]);
+    expect(toIdList(["a", 1, null])).toEqual(["a"]);
+    expect(toIdList("a")).toEqual([]);
+  });
+
+  it("같은 seq 를 다시 보낸 재시도는 처음 행동만", () => {
+    const step = (n: number, stepId: string, seq?: number): StepRecord => ({
+      uid: "u1",
+      commandId: 1,
+      stepId,
+      receivedAt: `2026-11-27T00:00:0${n}.000Z`,
+      screen: { deviceId: "d1", screenId: String(n) },
+      pkg: SETTINGS,
+      guide: { type: "highlight", source: "ai" },
+      ...(seq === undefined
+        ? {}
+        : { lastAction: { stepId: "x", seq, action: "tap", text: "설정" } }),
+    });
+    const acts = actionsOf([step(0, "a"), step(1, "b", 0), step(2, "c", 0)], command());
+    expect(acts.map((a) => [a.seq, a.on])).toEqual([[0, 0]]);
   });
 });
 
@@ -543,6 +657,7 @@ describe("POST /v1/elder/guide 지도 안내", () => {
                   mapFails ? Promise.reject(new Error("map down")) : Promise.resolve(snapshot()),
                 putEdge: () => Promise.resolve(),
                 putGoal: () => Promise.resolve(),
+                updateBlock: () => Promise.resolve(),
               },
               routeMap,
             },
@@ -594,6 +709,18 @@ describe("POST /v1/elder/guide 지도 안내", () => {
     expect(t.steps[1]).toMatchObject({ guide: { source: "ai" } });
     await t.post(request("home", undefined, 3));
     expect(t.modelCalls()).toBe(2);
+  });
+
+  it("같은 화면 재요청은 같은 stepId, 다시 준 횟수를 남기고 두 번 넘으면 Claude", async () => {
+    const t = setup(command());
+    const first = await t.post(request("home"));
+    const again = await t.post(request("home", undefined, 2));
+    expect(again).toMatchObject({ source: "map", stepId: first.stepId, requestId: 2 });
+    expect(t.record().mapProgress).toMatchObject({ mode: "map", resends: 1 });
+    await t.post(request("home", undefined, 3));
+    const fourth = await t.post(request("home", undefined, 4));
+    expect(fourth).toMatchObject({ source: "ai" });
+    expect(t.record().mapProgress).toMatchObject({ mode: "ai", reason: "resend-limit" });
   });
 
   it("지도를 못 읽으면 Claude 로 넘긴 것을 저장한다", async () => {

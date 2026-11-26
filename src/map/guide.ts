@@ -9,22 +9,25 @@
 import type { GuideRequest, GuideResponse } from "../ai/guide-schema.js";
 import type { CommandRecord, MapProgress } from "../route/command-store.js";
 import type { IndexedMap } from "../route/map.js";
-import { isSensitiveLabel, isSensitiveScreen } from "../review/safety-words.js";
+import { isLauncher, isSensitiveLabel, isSensitiveScreen } from "../review/safety-words.js";
+import { maskText } from "../shared/sensitive.js";
 import type { ScreenDocument } from "../debug/store.js";
 import type { MapEdge, MapFinishStep, MapSnapshot } from "./store.js";
 
 export const MAP_PROMPT_VERSION = "map@v1";
 const SAY_MAX = 80;
+/** 같은 화면에서 같은 지도 안내를 다시 주는 최대 횟수. 넘으면 Claude (누를 수 없는 버튼에 갇히지 않게) */
+export const MAX_RESENDS = 2;
 
 export type MapDecision =
-  /** 지도로 한 단계. progress 는 저장할 진행 상태 (stepId·response 는 라우트가 붙임) */
+  /** 지도로 한 단계. progress 는 저장할 진행 상태 (stepId 는 라우트가 붙임) */
   | {
       kind: "step";
       response: Omit<GuideResponse, "stepId">;
-      progress: Omit<MapProgress, "stepId" | "response">;
+      progress: Omit<MapProgress, "stepId">;
     }
-  /** 같은 화면 재요청: 저장된 안내를 그대로 */
-  | { kind: "resend"; response: GuideResponse }
+  /** 같은 화면 재요청: 같은 stepId 로 지금 화면 기준 다시 만든 안내. resends 는 저장할 다시 준 횟수 */
+  | { kind: "resend"; response: GuideResponse; resends: number }
   /** Claude 로. persist 면 진행 상태를 ai 로 바꿔 저장 (Claude 가 안내를 시작한 명령에 지도가 끼어들지 않게) */
   | { kind: "ai"; reason: string; persist: boolean };
 
@@ -39,8 +42,8 @@ export interface MapDecideInput {
   routeMap: IndexedMap;
 }
 
-const isLauncher = (pkg: string) => /launcher|home/i.test(pkg);
-const classOf = (c: string | undefined) => (c ?? "").split(".").pop() ?? "";
+/** 노드 클래스의 마지막 이름 (android.widget.TextView → TextView) */
+export const classOf = (c: string | undefined): string => (c ?? "").split(".").pop() ?? "";
 /**
  * 누를 노드의 글자 비교는 **그대로** (공백만 정리). 화면 지문은 숫자를 # 로 뭉개지만
  * 누를 버튼은 '30초'와 '10초'를 달리 봐야 한다
@@ -50,6 +53,9 @@ export const exactLabel = (text: string): string => text.trim().replace(/\s+/g, 
 export const nodeLabel = (node: { t?: string | undefined; d?: string | undefined }): string =>
   [node.t, node.d].map((x) => exactLabel(x ?? "")).find((x) => x !== "") ?? "";
 const labelOf = nodeLabel;
+/** 앱이 보낸 행동 글자(가리기 전)와 지도의 글자(가린 뒤)가 같은가 */
+const sameTarget = (actionText: string, targetText: string): boolean =>
+  exactLabel(maskText(actionText).text) === exactLabel(targetText);
 
 export function decideMapStep(input: MapDecideInput): MapDecision {
   const { request, command, snapshot, routeMap, fp } = input;
@@ -57,15 +63,21 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
   // Claude 로 넘긴 것을 저장해 다음부터 지도를 보지 않는다 (Claude → 지도로는 돌아가지 않음)
   const ai = (reason: string): MapDecision => ({ kind: "ai", reason, persist: true });
 
+  // 끝난 명령은 쓰지 않는다 (끝난 명령 갱신이 검토 Stream 을 다시 깨우지 않게)
+  if (command.endResult !== undefined) return { kind: "ai", reason: "ended", persist: false };
   if (progress?.mode === "ai") return { kind: "ai", reason: "already-ai", persist: false };
+  // 지도 진행 상태 없이 앞 안내가 있었던 명령(앞 요청에서 Claude 가 안내했는데 ai 저장이 안 된 경우)은
+  // 지도가 끼어들지 않는다
+  const last = request.lastAction;
+  if (!progress && (last?.stepId !== undefined || request.history.length > 0)) {
+    return ai("claude-started");
+  }
 
   // ── 전제: 고른 목표가 지도에 검증되어 있고, 위험하지 않은 명령 ──
   if (command.chosenApp === undefined || command.chosenGoal === undefined) return ai("no-goal");
   if (command.category === "scam" || command.level === "L3" || command.degraded) {
     return ai("unsafe-command");
   }
-  // 끝난 명령은 쓰지 않는다 (끝난 명령 갱신이 검토 Stream 을 다시 깨우지 않게)
-  if (command.endResult !== undefined) return { kind: "ai", reason: "ended", persist: false };
   const routeGoal = routeMap.goals.get(command.chosenGoal);
   const app = routeMap.apps.get(command.chosenApp);
   if (!routeGoal || !app || routeGoal.app !== app.id) return ai("unknown-goal");
@@ -83,7 +95,6 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
   const edges = snapshot.edges.filter(
     (e) => e.status === "verified" && !snapshot.block.edgeIds.includes(e.edgeId),
   );
-  const last = request.lastAction;
 
   // ── 앞 안내와의 관계 ──
   let finishFrom = 0;
@@ -94,20 +105,29 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
       // 저장된 응답을 그대로 쓰지 않고 지금 지도·화면으로 다시 만든다: 그 사이 차단된 연결선은 멈추고,
       // 노드 번호가 바뀌었으면 지금 번호로 (지문은 노드 번호를 보지 않음). stepId 는 같게
       if (progress.fp !== fp) return ai("not-followed");
+      const resends = (progress.resends ?? 0) + 1;
+      if (resends > MAX_RESENDS) return ai("resend-limit");
       const again = sameStepAgain(input, progress, edges);
       if (again.kind !== "step") return again;
-      return { kind: "resend", response: { ...again.response, stepId: progress.stepId } };
+      return { kind: "resend", response: { ...again.response, stepId: progress.stepId }, resends };
     }
     if (progress.kind === "edge") {
       const edge = edges.find((e) => e.edgeId === progress.ref);
       if (!edge) return ai("edge-gone");
       if (last.action !== edge.action) return ai("different-action");
+      // 다른 것을 눌렀으면 (같은 화면 다른 줄 등) 지도의 길이 아님
+      if (edge.action === "tap" && !sameTarget(last.text, edge.targetText)) {
+        return ai("different-target");
+      }
       if (edge.toFp !== fp) return ai("unexpected-screen");
     } else {
       const index = Number(progress.ref);
       const step = goal.finish[index];
       if (!step) return ai("finish-gone");
       if (last.action !== step.action) return ai("different-action");
+      if (step.action === "tap" && !sameTarget(last.text, step.targetText)) {
+        return ai("different-target");
+      }
       // page: 다음 화면으로 바뀜, node_state: 체크·선택이 바뀜 → 둘 다 지문이 달라져야 확인됨
       if (fp === progress.fp) return ai("finish-not-verified");
       // 다음 끝 단계는 seed 때 본 그 화면에서만 (다른 것이 바뀌었거나 다른 화면이면 Claude)
@@ -200,7 +220,7 @@ export function firstEdgeToward(
 function toStep(
   input: MapDecideInput,
   step: Pick<MapFinishStep, "action" | "targetText" | "targetClass">,
-  progress: Omit<MapProgress, "stepId" | "response">,
+  progress: Omit<MapProgress, "stepId">,
 ): MapDecision {
   const ai = (reason: string): MapDecision => ({ kind: "ai", reason, persist: true });
   const { requestId } = input.request;
@@ -224,7 +244,7 @@ function toStep(
       response: {
         requestId,
         type: "highlight",
-        say: truncate(`'${text}'${objectParticle(text)} 눌러 주세요.`),
+        say: pressSay(text),
         status: "in_progress",
         target: node.i,
         targetText: text,
@@ -234,6 +254,16 @@ function toStep(
   }
 
   const dir = SWIPE[step.action];
+  // 밀 곳(막대 등)이 글자로 하나뿐이면 가리킨다. 막대 값이 바뀌어 글자가 달라지면 화살표 없이 방향만
+  const want = exactLabel(step.targetText);
+  const hits =
+    want === ""
+      ? []
+      : input.maskedNodes.filter(
+          (n) =>
+            labelOf(n) === want && (step.targetClass === "" || classOf(n.c) === step.targetClass),
+        );
+  const node = hits.length === 1 ? hits[0] : undefined;
   return {
     kind: "step",
     response: {
@@ -242,6 +272,7 @@ function toStep(
       say: `화면을 ${DIR_WORD[dir]} 밀어 주세요.`,
       status: "in_progress",
       dir,
+      ...(node ? { target: node.i, targetText: nodeLabel(node) } : {}),
     },
     progress,
   };
@@ -262,4 +293,10 @@ export function objectParticle(text: string): "을" | "를" {
   return "를";
 }
 
-const truncate = (text: string) => (text.length > SAY_MAX ? text.slice(0, SAY_MAX) : text);
+/** "'글자'을/를 눌러 주세요." 길면 끝을 자르지 않고 글자를 줄인다 ("눌러 주세요"가 남게) */
+export function pressSay(text: string): string {
+  const say = (label: string) => `'${label}'${objectParticle(label)} 눌러 주세요.`;
+  if (say(text).length <= SAY_MAX) return say(text);
+  const room = SAY_MAX - say("").length - 1;
+  return say(`${text.slice(0, Math.max(1, room))}…`);
+}
