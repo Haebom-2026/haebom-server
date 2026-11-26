@@ -93,23 +93,21 @@ if (isMock) {
   window.addEventListener("hashchange", route);
   route();
 } else {
-  try {
-    watchUser((user) => {
-      if (!user) {
-        userSlot.replaceChildren();
-        window.removeEventListener("hashchange", route);
-        signInScreen();
-        return;
-      }
-      userSlot.replaceChildren(
-        user.email ?? "",
-        " ",
-        h("button", { class: "link small", onclick: () => void logOut() }, "로그아웃"),
-      );
-      window.addEventListener("hashchange", route);
-      route();
-    });
-  } catch (error) {
+  watchUser((user) => {
+    if (!user) {
+      userSlot.replaceChildren();
+      window.removeEventListener("hashchange", route);
+      signInScreen();
+      return;
+    }
+    userSlot.replaceChildren(
+      user.email ?? "",
+      " ",
+      h("button", { class: "link small", onclick: () => void logOut() }, "로그아웃"),
+    );
+    window.addEventListener("hashchange", route);
+    route();
+  }).catch((error: unknown) => {
     signInScreen((error as Error).message);
-  }
+  });
 }
