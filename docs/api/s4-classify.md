@@ -1,6 +1,6 @@
 # S4 — #17 classify · 앱 선택 API 계약
 
-- 상태: **dev 구현** (R2). 앱 연동 전
+- 상태: **dev 구현** (R2~R5). 앱 연동 전 → 연동 흐름은 [앱 연동 안내](app-integration.md)
 - 관련: 지침서 4장(민감도)·5.3(#17), [서버 기획](../server-plan.md) 5.2, [jev 라우팅 기획](../jev-routing-plan.md) 4·5장
 - 프롬프트: `classify@v1` ([src/ai/prompts/classify.ts](../../src/ai/prompts/classify.ts))
 
@@ -119,7 +119,7 @@ classify 응답의 `route.candidates` 중 **폰이 고른 앱**을 서버에 고
 | 하나도 안 깔림                    | 설치를 권함 (확인 불가 `unknown`이면 권하지 않음)                                              |
 
 - `named`: 말에 앱 이름이 있었음. `mentionedApp`: Play 스토어로 다른 앱을 깔기·지울 때 말한 앱 이름
-- 지도 안내(Claude 없이 안내)는 아직 없음 (R4). 지금은 guide가 그대로 Claude로 안내한다
+- 지도 안내(Claude 없이 안내)는 dev에서 동작 (R4·R5, [jev 기획](../jev-routing-plan.md) 5.4·8.4). 앱 연동 흐름은 [앱 연동 안내](app-integration.md)
 
 ## 5. clarify (하려는 일)
 
@@ -178,10 +178,11 @@ classify 응답의 `route.candidates` 중 **폰이 고른 앱**을 서버에 고
 
 - 한 번 정한 결과는 바뀌지 않음: 같은 결과 재전송 200, 다른 결과 409. 다른 어르신의 명령·지난 명령은 404
 - `finalScreen`은 성공 판정의 근거라 `done`·`stopped_safe`이면 꼭 보내 주세요 (없으면 검토에서 reject). dev 디버그 저장소에 가린 뒤 저장, prod는 저장하지 않음
+- `deviceId`: guide와 같은 기기 ID. dev 지도 학습의 기기 수에 씀 ([앱 연동 안내 6장](app-integration.md#6-deviceid))
 - `lastAction`: 마지막 guide 화면에서 한 마지막 행동 (예: 밝기 막대 밀기). 다음 guide 요청이 없으니 끝 신호에 실어 보냅니다. 모양은 guide의 `lastAction`과 같음 (`seq`는 이어서) — dev에서만 저장 (prod는 개인정보 정책 뒤)
-- dev에서는 `done`·`stopped_safe`가 붙으면 DynamoDB Stream으로 **Opus 검토**(`review-fn`, `review@v1`)가 돕니다. 결과는 **판정만** `ELDER#<uid>` / `CMD#<id>#REVIEW`(30일)에 남고 지도에는 반영하지 않습니다
-  - `accept`: 나중에 자동 반영할 후보 (기존 목표의 안전한 이동·끝 단계)
-  - `human`: 사람 확인 필요 (새 목표, 민감한 끝 단계·목표, 페이지를 못 맞춘 이동)
+- dev에서는 `done`·`stopped_safe`가 붙으면 DynamoDB Stream으로 **Opus 검토**(`review-fn`, `review@v1`)가 돕니다. 결과는 `ELDER#<uid>` / `CMD#<id>#REVIEW`(30일)에 남고, R5부터 `accept`는 지도에 **후보로 자동 반영**됩니다 (기기 2대면 verified, [jev 기획](../jev-routing-plan.md) 8.4)
+  - `accept`: 지도에 자동 반영 (기존 목표의 안전한 이동·끝 단계, R5)
+  - `human`: 사람 확인 대기로 감 (새 목표, 민감한 끝 단계·목표, 페이지를 못 맞춘 이동)
   - `reject`: 학습 안 함 (성공 근거 없음, 마지막 화면 없음, 행동 순번이 0부터 이어지지 않음, 민감 행동이 이동에 섞임(권한·설치 창·비밀번호 칸·금액 화면에서 한 행동 포함), 같은 페이지 안의 행동을 이동으로 냄, 화면 속 지시·검토 조작·링크 흔적, 대화·메일·메모·금융·건강 앱 화면을 지남, 사기 의심·민감 역할 명령 …)
   - 고른 앱이 아닌 앱 화면을 지나면(홈 화면 제외) `human`, 끝난 뒤 classify 재시도로 사기 의심·L3가 되면 그 판정을 `reject`로, L2가 되면 `accept`였던 판정을 `human`으로 낮춤. 민감한 실제 행동을 Opus가 이동·끝 단계에서 빼고 내도 `human`
   - 검토는 명령 세대(`gen`)마다 한 번만 저장 (`CMD#<id>#REVIEW#<gen>`). 모델 통신 오류·시간 초과는 판정을 남기지 않고 Stream이 다시 시도

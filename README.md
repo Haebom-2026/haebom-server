@@ -27,13 +27,14 @@ infra/envs/{dev,prod}/                    환경별 진입점 (같은 AWS 계정
 
 ## 문서
 
-| 문서                                                             | 내용                                                   |
-| ---------------------------------------------------------------- | ------------------------------------------------------ |
-| [docs/server-plan.md](docs/server-plan.md)                       | 서버 기획 전체 (아키텍처, 데이터, API 목록, 개발 단계) |
-| [docs/api/s1-users-links.md](docs/api/s1-users-links.md)         | S1 사용자·기기·연결 API 계약서 (앱 연동용)             |
-| [docs/api/s5-guide.md](docs/api/s5-guide.md)                     | #16 guide API 계약서 (앱 연동용)                       |
-| [docs/debug-viewer-app-guide.md](docs/debug-viewer-app-guide.md) | 디버그 뷰어 앱 연동 가이드                             |
-| [docs/adb-capture.md](docs/adb-capture.md)                       | adb 캡처 사용법                                        |
+| 문서                                                             | 내용                                                           |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| [docs/server-plan.md](docs/server-plan.md)                       | 서버 기획 전체 (아키텍처, 데이터, API 목록, 개발 단계)         |
+| [docs/api/s1-users-links.md](docs/api/s1-users-links.md)         | S1 사용자·기기·연결 API 계약서 (앱 연동용)                     |
+| [docs/api/s5-guide.md](docs/api/s5-guide.md)                     | #16 guide API 계약서 (앱 연동용)                               |
+| [docs/api/app-integration.md](docs/api/app-integration.md)       | 고령자 앱 연동 안내 (classify → 앱 선택 → guide → 끝 신호, R6) |
+| [docs/debug-viewer-app-guide.md](docs/debug-viewer-app-guide.md) | 디버그 뷰어 앱 연동 가이드                                     |
+| [docs/adb-capture.md](docs/adb-capture.md)                       | adb 캡처 사용법                                                |
 
 ## 현재 dev 주소
 
