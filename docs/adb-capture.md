@@ -11,7 +11,9 @@
 
 1. Android SDK platform-tools (`adb`). Android Studio 가 있으면 `~/Library/Android/sdk/platform-tools/adb` 를 자동으로 찾는다 (`ANDROID_HOME` 도 인식).
 2. 기기 연결
-   - 실제 폰: 개발자 옵션 → USB 디버깅 켜기 → USB 연결 → 폰에서 "허용"
+   - 실제 폰 (USB): 개발자 옵션 → USB 디버깅 켜기 → USB 연결 → 폰에서 "허용"
+   - 실제 폰 (무선, 같은 네트워크): 개발자 옵션 → 무선 디버깅 → "페어링 코드로 기기 페어링" →
+     `adb pair <IP:페어링포트> <6자리 코드>` → `adb connect <IP:연결포트>` (무선 디버깅 화면 위쪽 주소, 페어링 포트와 다름)
    - 에뮬레이터: Android Studio Device Manager 에서 실행
    - 확인: `adb devices` 에 `device` 로 나와야 한다
 3. dev 가 배포돼 있어야 한다 (API 주소·Firebase 웹 apiKey 를 `infra/envs/dev` 에서 읽음)
@@ -24,14 +26,14 @@ npm run capture
 ```
 
 ```
-[16:53:35] 기기 emulator-5554 (sdk_gphone64_arm64, Android 14) → deviceId adb-emulator-5554
+[17:01:37] 기기 100.100.172.233:43041 (SM-F711N, Android 13) → deviceId adb-R3CR80QJAVT
 [16:53:37] API https://9a2sj8hqlb.execute-api.ap-northeast-2.amazonaws.com
 [16:53:54] 화면 저장 com.android.settings 노드 27개 지문 7ceef2272d6b3dd2
 [16:54:08] 화면 저장 com.android.settings 노드 20개 지문 d43044b59d99137f
 ```
 
 - 5초마다 heartbeat, 1.5초마다 화면을 읽어 바뀌었을 때만 보낸다. `Ctrl+C` 로 끝낸다.
-- 뷰어(`https://d3jcc37k40jy8z.cloudfront.net`)에 `adb-<시리얼>` 기기로 나타난다. 이름을 붙여 두면 구분하기 쉽다.
+- 뷰어(`https://d3jcc37k40jy8z.cloudfront.net`)에 `adb-<기기 고유 번호>` 기기로 나타난다 (`ro.serialno`, 예: `adb-R3CR80QJAVT`). 무선 디버깅은 adb 시리얼이 `IP:포트` 라 연결마다 바뀌므로 기기 고유 번호를 쓴다. 이름을 붙여 두면 구분하기 쉽다.
 
 | 옵션                | 뜻                                                        |
 | ------------------- | --------------------------------------------------------- |
@@ -68,5 +70,7 @@ npm run capture -- --dry-run > sample.json
 | 계속 바뀌는 화면은 못 읽음 | 동영상, 진행 표시, 일부 설정 화면(예: 휴대전화 정보)에서 `uiautomator` 가 "could not get idle state" 로 거부한다. 로그에 한 번 알리고 건너뛴다 |
 | 실시간이 아님              | 화면 이벤트가 아니라 1.5초 간격으로 읽는다. 한 번 읽는 데 0.1~수 초                                                                            |
 | 앱과 필터가 다를 수 있음   | 같은 접근성 트리를 읽지만 고령자 앱의 노드 선택 규칙과 다를 수 있다 → 앱이 붙으면 앱이 보낸 것을 기준으로 본다                                 |
+
+실기기는 실제로 쓰는 앱 화면이 그대로 서버로 간다. 서버가 주민번호·카드·계좌·금액을 가리고 비밀번호 칸 글자는 보내지 않지만, 이름·연락처 같은 개인 정보 화면은 피한다 (dev 에 3일 보관).
 
 이 한계는 고령자 앱의 AccessibilityService 에는 없다. 이벤트 즉시 반응까지 확인해야 할 때는 앱으로 본다.

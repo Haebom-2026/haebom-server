@@ -108,13 +108,15 @@ async function dumpXml(serial: string): Promise<string> {
 
 async function deviceInfo(serial: string) {
   const prop = async (name: string) => (await adb(serial, "shell", "getprop", name)).trim();
-  const [model, release] = await Promise.all([
+  const [model, release, hardwareSerial] = await Promise.all([
     prop("ro.product.model"),
     prop("ro.build.version.release"),
+    prop("ro.serialno"),
   ]);
   return {
+    // 무선 디버깅은 adb 시리얼이 IP:포트라 연결마다 바뀐다 → 기기 고유 번호(ro.serialno)를 쓴다.
     // 서버 규칙: [A-Za-z0-9_-] 8~64자
-    deviceId: `adb-${serial}`
+    deviceId: `adb-${hardwareSerial || serial}`
       .replace(/[^A-Za-z0-9_-]/g, "-")
       .padEnd(8, "0")
       .slice(0, 64),
