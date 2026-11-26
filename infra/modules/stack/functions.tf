@@ -23,6 +23,7 @@ module "ai_fn" {
   environment = merge(local.common_env, {
     ANTHROPIC_SECRET_ID = module.secrets.ids["anthropic-api-key"]
     ANTHROPIC_MODEL     = var.anthropic_model
+    TABLE_AI_CACHE      = module.dynamodb.ai_cache_table_name
   }, var.ai_extra_environment)
   policy_json              = data.aws_iam_policy_document.ai.json
   permissions_boundary_arn = local.lambda_boundary_arn

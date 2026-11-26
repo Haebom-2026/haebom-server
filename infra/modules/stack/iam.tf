@@ -40,6 +40,11 @@ data "aws_iam_policy_document" "ai" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [module.secrets.arns["anthropic-api-key"]]
   }
+  statement {
+    sid       = "GuideResponseCache"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+    resources = [module.dynamodb.ai_cache_table_arn]
+  }
 }
 
 data "aws_iam_policy_document" "push" {

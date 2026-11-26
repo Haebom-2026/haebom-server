@@ -17,3 +17,11 @@ output "idem_table_name" {
 output "idem_table_arn" {
   value = aws_dynamodb_table.idem.arn
 }
+
+output "ai_cache_table_name" {
+  value = aws_dynamodb_table.ai_cache.name
+}
+
+output "ai_cache_table_arn" {
+  value = aws_dynamodb_table.ai_cache.arn
+}

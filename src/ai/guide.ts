@@ -1,10 +1,16 @@
 /**
  * #16 guide: 화면 요소 목록 → 다음 행동 하나 (docs/server-plan.md 5.3).
  *
- * 순서: 빈 화면·거부 규칙 → 마스킹 → 모델 호출 → 후처리 검증.
+ * 순서: 빈 화면·거부 규칙 → [응답 캐시 조회] → 마스킹 → 모델 호출 → 후처리 검증 → [응답 캐시 저장].
  * 모델이 실패·거절·시간 초과해도 앱이 그대로 읽을 수 있는 { type: "say" } 로 답한다.
  */
 import type { GuideModelOutput, GuideRequest, GuideResponse } from "./guide-schema.js";
+import {
+  GUIDE_CACHE_TTL_SECONDS,
+  revalidateCached,
+  type CachedGuideResponse,
+  type GuideCacheStore,
+} from "../cache/guide-cache.js";
 import { maskDeep, maskText } from "../shared/sensitive.js";
 import type { Logger } from "../shared/logger.js";
 import { GUIDE_PROMPT_VERSION } from "./prompts/guide.js";
@@ -73,6 +79,15 @@ export interface GuideTrace {
   usage?: ModelUsage;
   latencyMs?: number;
   error?: string;
+  /** 응답 캐시: hit 이면 모델을 부르지 않음 */
+  cache?: "hit" | "miss";
+}
+
+/** 이 요청의 응답 캐시 (키는 guideCacheKey 로 미리 계산) */
+export interface GuideCacheHandle {
+  store: GuideCacheStore;
+  key: string;
+  now?: () => Date;
 }
 
 const SECRET_FIELD =
@@ -208,6 +223,7 @@ export async function guide(
   model: GuideModel,
   log: Logger,
   onTrace?: (trace: GuideTrace) => void,
+  cache?: GuideCacheHandle,
 ): Promise<GuideResponse> {
   const { requestId } = request;
   const trace: GuideTrace = { promptVersion: GUIDE_PROMPT_VERSION };
@@ -227,6 +243,34 @@ export async function guide(
     log.info("guide skipped", { reason: "secret-screen", pkg: request.screen.pkg });
     trace.skipped = "secret-screen";
     return say(FALLBACK_SAY.secret);
+  }
+
+  // 같은 어르신·같은 화면·같은 요청이면 저장된 답 (target 은 지금 화면 글자로 다시 확인)
+  if (cache) {
+    const started = Date.now();
+    try {
+      const hit = await cache.store.get(cache.key);
+      const usable = hit ? revalidateCached(hit.response, nodeTexts(request)) : undefined;
+      if (usable) {
+        trace.cache = "hit";
+        trace.latencyMs = Date.now() - started;
+        onTrace?.(trace);
+        log.info("guide completed", {
+          promptVersion: GUIDE_PROMPT_VERSION,
+          goal: request.goal,
+          pkg: request.screen.pkg,
+          nodeCount: request.screen.nodes.length,
+          cache: "hit",
+          type: usable.type,
+          latencyMs: trace.latencyMs,
+        });
+        return { requestId, ...usable, cached: true };
+      }
+    } catch (error) {
+      // 캐시가 안 돼도 안내는 계속 (모델을 부름)
+      log.warn("guide cache get failed", { error });
+    }
+    trace.cache = "miss";
   }
 
   const { input, masked } = toPromptInput(request);
@@ -256,6 +300,21 @@ export async function guide(
       : say(FALLBACK_SAY.unsure);
   if (result.status === "ok") onTrace?.(trace);
 
+  // 모델이 정상 답하고 후처리에서 낮춰지지 않은 답만 저장
+  const downgraded = result.status === "ok" && response.type !== result.output.type;
+  const fallbackSay = (Object.values(FALLBACK_SAY) as string[]).includes(response.say);
+  if (cache && result.status === "ok" && !downgraded && !fallbackSay) {
+    const stored = Object.fromEntries(
+      Object.entries(response).filter(([field]) => field !== "requestId"),
+    ) as CachedGuideResponse;
+    try {
+      const savedAt = (cache.now ?? (() => new Date()))().toISOString();
+      await cache.store.put(cache.key, { response: stored, savedAt }, GUIDE_CACHE_TTL_SECONDS);
+    } catch (error) {
+      log.warn("guide cache put failed", { error });
+    }
+  }
+
   log.info("guide completed", {
     promptVersion: GUIDE_PROMPT_VERSION,
     goal: request.goal,
@@ -265,7 +324,8 @@ export async function guide(
     status: result.status,
     stopReason: result.stopReason,
     type: response.type,
-    downgraded: result.status === "ok" && response.type !== result.output.type,
+    downgraded,
+    ...(cache ? { cache: "miss" } : {}),
     latencyMs: Date.now() - started,
     ...result.usage,
   });

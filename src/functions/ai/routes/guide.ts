@@ -1,5 +1,7 @@
 import { guide, type GuideModel, type GuideTrace } from "../../../ai/guide.js";
 import { guideRequestSchema } from "../../../ai/guide-schema.js";
+import { GUIDE_PROMPT_VERSION } from "../../../ai/prompts/guide.js";
+import { guideCacheKey, type GuideCacheStore } from "../../../cache/guide-cache.js";
 import type { ProfileGuard } from "../../../core/profile.js";
 import type { GuideTraceRecorder } from "../../../debug/guide-trace.js";
 import { json } from "../../../shared/http.js";
@@ -9,8 +11,10 @@ import { parseJsonBody } from "../../../shared/validate.js";
 export interface GuideRouteOptions {
   /** dev 에서만: 요청·AI 입력·판단을 디버그 뷰어에 남긴다 */
   recorder?: GuideTraceRecorder | undefined;
-  /** 기록에 남길 모델 이름 */
+  /** 기록에 남길 모델 이름 (응답 캐시 키에도 들어감) */
   modelName?: string | undefined;
+  /** 응답 캐시 (docs/server-plan.md 9장). 없으면 매번 모델을 부른다 */
+  cache?: GuideCacheStore | undefined;
   now?: () => Date;
 }
 
@@ -23,15 +27,35 @@ export interface GuideRouteOptions {
 export const createGuideRoute =
   (model: GuideModel, profiles: ProfileGuard, options: GuideRouteOptions = {}): RouteHandler =>
   async ({ event, log }) => {
-    const receivedAt = (options.now ?? (() => new Date()))();
+    const now = options.now ?? (() => new Date());
+    const receivedAt = now();
     const me = await profiles.require(event, "elder");
     const request = parseJsonBody(event, guideRequestSchema);
     const requestLog = log.child({ uid: me.uid, requestId: request.requestId });
 
+    const cache = options.cache
+      ? {
+          store: options.cache,
+          key: guideCacheKey({
+            uid: me.uid,
+            request,
+            promptVersion: GUIDE_PROMPT_VERSION,
+            model: options.modelName ?? "",
+          }),
+          now,
+        }
+      : undefined;
+
     let trace: GuideTrace | undefined;
-    const response = await guide(request, model, requestLog, (t) => {
-      trace = t;
-    });
+    const response = await guide(
+      request,
+      model,
+      requestLog,
+      (t) => {
+        trace = t;
+      },
+      cache,
+    );
 
     if (options.recorder && trace) {
       try {

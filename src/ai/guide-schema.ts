@@ -52,4 +52,6 @@ export interface GuideResponse {
   targetText?: string;
   /** swipe: 밀어서 찾으려는 요소의 글자. 화면에 나타나면 앱이 바로 누르기 안내로 바꿀 수 있다. */
   seekText?: string;
+  /** 응답 캐시에서 꺼낸 답이면 true (모델을 부르지 않음). 모델이 답했으면 빠짐 */
+  cached?: true;
 }

@@ -1,4 +1,5 @@
 import { claudeGuideModel } from "../../ai/guide-model.js";
+import { createAwsGuideCache } from "../../cache/aws-guide-cache.js";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createProfileGuard } from "../../core/profile.js";
 import { createAwsDebugStore } from "../../debug/aws-store.js";
@@ -21,6 +22,10 @@ const recorder =
     ? createGuideTraceRecorder(createAwsDebugStore({ table: debugTable, bucket: debugBucket }))
     : undefined;
 
+/** #16 응답 캐시 (docs/server-plan.md 9장). 테이블이 없으면 캐시 없이 동작 */
+const cacheTable = process.env.TABLE_AI_CACHE;
+const cache = cacheTable ? createAwsGuideCache({ table: cacheTable }) : undefined;
+
 /** ai-fn: #16 guide, #17 classify. */
 export const router = createRouter([
   {
@@ -29,6 +34,7 @@ export const router = createRouter([
     handler: createGuideRoute(claudeGuideModel, profiles, {
       recorder,
       modelName: process.env.ANTHROPIC_MODEL,
+      cache,
     }),
   },
   { method: "POST", path: "/v1/elder/classify", handler: notImplemented },

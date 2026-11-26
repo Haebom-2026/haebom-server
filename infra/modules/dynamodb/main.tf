@@ -1,6 +1,6 @@
 # haebom-<env>-main : 도메인 단일 테이블 (docs/server-plan.md 3.2)
 # haebom-<env>-idem : Idempotency-Key 응답 저장
-# AI 응답 캐시 테이블은 캐싱 설계(9장)를 받은 뒤 추가한다.
+# haebom-<env>-ai-cache : #16 guide 응답 캐시 (9장, src/cache/guide-cache.ts)
 
 resource "aws_dynamodb_table" "main" {
   name         = "${var.name_prefix}-main"
@@ -99,6 +99,27 @@ resource "aws_dynamodb_table" "idem" {
 
   deletion_protection_enabled = var.deletion_protection
 
+  server_side_encryption {
+    enabled = true
+  }
+}
+
+resource "aws_dynamodb_table" "ai_cache" {
+  name         = "${var.name_prefix}-ai-cache"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "key"
+
+  attribute {
+    name = "key"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  # 캐시는 언제든 다시 만들 수 있어서 삭제 보호를 걸지 않는다
   server_side_encryption {
     enabled = true
   }
