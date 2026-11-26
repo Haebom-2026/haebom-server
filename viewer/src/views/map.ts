@@ -276,7 +276,13 @@ export function mapView(root: HTMLElement): () => void {
         const latest = members[members.length - 1];
         if (!latest) continue;
         const dot = reuse(`g:${key}`, latest);
-        Object.assign(dot, { doc: latest, key, members, group: [dot], r: radiusOf(members.length) });
+        Object.assign(dot, {
+          doc: latest,
+          key,
+          members,
+          group: [dot],
+          r: radiusOf(members.length),
+        });
         next.set(dot.id, dot);
       } else {
         const group: Dot[] = [];
@@ -318,7 +324,10 @@ export function mapView(root: HTMLElement): () => void {
     sim = forceSimulation<Dot, Link>([...dots.values()])
       .force("link", forceLink<Dot, Link>(links).distance(10).strength(0.9))
       .force("charge", forceManyBody<Dot>().strength(-14).distanceMax(160))
-      .force("collide", forceCollide<Dot>((d) => d.r + 1.5))
+      .force(
+        "collide",
+        forceCollide<Dot>((d) => d.r + 1.5),
+      )
       .force("x", forceX<Dot>((d) => anchor.get(d.doc.pkg)?.x ?? 0).strength(0.07))
       .force("y", forceY<Dot>((d) => anchor.get(d.doc.pkg)?.y ?? 0).strength(0.07))
       .stop();
