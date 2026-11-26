@@ -53,6 +53,15 @@ export function inboxEventFromRecord(record: DynamoDBRecord): InboxEvent | undef
   };
 }
 
+export const LOCK_SCREEN_TEXT = {
+  activity: { title: "해봄 가족", body: "새 가족 알림이 도착했습니다." },
+  help: {
+    title: "해봄 가족 · 도움 필요",
+    body: "가족에게 도움이 필요할 수 있습니다. 앱에서 확인해 주세요.",
+  },
+  urgent: { title: "해봄 가족 · 긴급", body: "가족이 도움을 요청했습니다. 앱에서 확인해 주세요." },
+} as const;
+
 export function notificationDisplay(event: InboxEvent): NonNullable<FcmMessage["notification"]> {
   const urgent = isUrgent(event);
   const scam = event.category === "scam" || event.level === "L3";
@@ -62,11 +71,14 @@ export function notificationDisplay(event: InboxEvent): NonNullable<FcmMessage["
       : event.type === "stuck"
         ? "help_alerts"
         : "family_activity";
-  const body =
-    event.type === "sensitive_entry" && !scam
-      ? "새 가족 알림이 도착했습니다."
-      : "가족이 도움이 필요해요. 앱에서 확인해 주세요.";
-  return { title: "해봄", body, channelId, urgent };
+  // 보호자 앱이 앱 안에서 띄우는 문구와 같게 (보호자 앱 S2 검토). 앱 이름·내용은 넣지 않는다.
+  const text =
+    scam || event.type === "sos"
+      ? LOCK_SCREEN_TEXT.urgent
+      : event.type === "stuck"
+        ? LOCK_SCREEN_TEXT.help
+        : LOCK_SCREEN_TEXT.activity;
+  return { ...text, channelId, urgent };
 }
 
 export async function notifyInbox(event: InboxEvent, deps: PushDeps): Promise<void> {

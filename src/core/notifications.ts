@@ -86,6 +86,16 @@ export const sosSchema = z.object({
   reason: reason.optional(),
 });
 
+/** 모두 읽음: 본문이 없거나 {} 이면 전체, elderId 가 있으면 그 어르신만 */
+export const readAllSchema = z
+  .object({
+    elderId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,128}$/)
+      .optional(),
+  })
+  .default({});
+
 export const listQuerySchema = z.object({
   cursor: z.string().max(200).optional(),
   since: z.iso.datetime().optional(),
@@ -138,6 +148,10 @@ export interface NotificationStore {
   ): Promise<InboxPage>;
   /** 없으면 false */
   markRead(guardianId: string, id: string, readAt: string): Promise<boolean>;
+  /** 보호자 알림함 한 건 (FCM 알림을 눌러 상세를 열 때) */
+  getInbox(guardianId: string, id: string): Promise<InboxItem | undefined>;
+  /** 안 읽은 알림을 모두 읽음으로. elderId 가 있으면 그 어르신 것만. 바꾼 개수를 돌려준다. */
+  markAllRead(guardianId: string, readAt: string, elderId?: string): Promise<number>;
   /** 연결 해제 시: 그 보호자 알림함에서 그 어르신 알림을 지운다 (보호자 앱 요청) */
   deleteInboxForElder(guardianId: string, elderId: string): Promise<number>;
 }

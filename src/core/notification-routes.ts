@@ -18,6 +18,7 @@ import {
   listQuerySchema,
   newNotificationId,
   notificationIdSchema,
+  readAllSchema,
   sensitiveEntrySchema,
   sosSchema,
   stuckSchema,
@@ -152,6 +153,34 @@ export function createNotificationRoutes(deps: NotificationDeps): Route[] {
           ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
           serverTime,
         });
+      },
+    },
+
+    // 알림 한 건 (보호자 앱 요청: FCM 알림을 눌러 상세 열기). 없거나 해제됐으면 404.
+    {
+      method: "GET",
+      path: "/v1/guardian/notifications/{id}",
+      handler: async ({ event, params }) => {
+        const me = await profiles.require(event, "guardian");
+        const id = notificationIdSchema.safeParse(params.id);
+        if (!id.success) throw new ApiError("invalid-argument", "invalid notification id");
+        const item = await notifications.getInbox(me.uid, id.data);
+        if (item === undefined) throw new ApiError("not-found", "Notification not found");
+        return json(200, inboxView(item));
+      },
+    },
+
+    // 모두 읽음 (보호자 앱 "모두 확인"). elderId 를 주면 그 어르신 것만.
+    {
+      method: "POST",
+      path: "/v1/guardian/notifications/read-all",
+      handler: async ({ event }) => {
+        const me = await profiles.require(event, "guardian");
+        // 본문 없이 불러도 된다 (전체 읽음).
+        const input =
+          event.body === undefined || event.body === "" ? {} : parseJsonBody(event, readAllSchema);
+        const updated = await notifications.markAllRead(me.uid, now().toISOString(), input.elderId);
+        return json(200, { updated });
       },
     },
 

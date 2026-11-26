@@ -192,11 +192,11 @@
 | 6   | POST /v1/elder/sensitive-entries         | api-fn | created / duplicate_suppressed / no_guardians. level·category·reason 수용                        |
 | 7   | POST /v1/elder/stuck                     | api-fn | 중복 방지 없음                                                                                   |
 | 8   | POST /v1/elder/sos                       | api-fn | 중복 방지 없음. category·reason 선택 필드 수용                                                   |
-| 9   | POST /v1/elder/approvals                 | api-fn | action 6종 수용. 같은 action pending이면 기존 approvalId 반환                                    |
-| 10  | POST /v1/elder/approvals/{id}/cancel     | api-fn | pending만, 아니면 409                                                                            |
+| 9   | POST /v1/elder/approvals                 | api-fn | action `guide_*` 수용(7종 + 새 값). 같은 action pending이면 `existing`으로 기존 approvalId 반환  |
+| 10  | POST /v1/elder/approvals/{id}/cancel     | api-fn | pending만, 아니면 409 (already-responded / approval-expired / approval-cancelled)                |
 | 11  | POST /v1/elder/connect-codes             | api-fn | 6자리, 10분, 일회용, 이전 코드 무효                                                              |
 | 12  | DELETE /v1/elder/links/{guardianId}      | api-fn | 204. 없으면 404 not-found (S1 구현)                                                              |
-| 13  | POST /v1/guardian/approvals/{id}/respond | api-fn | `{decision: approved                                                                             | rejected}`. pending & 만료 전만 |
+| 13  | POST /v1/guardian/approvals/{id}/respond | api-fn | `{decision: approved \| rejected}`. pending·만료 전·연결된 보호자만, 첫 응답만. 409 reason 3종   |
 | 14  | POST /v1/guardian/links                  | api-fn | `{code, elderLabel, guardianLabel}`, Idempotency-Key. reason 은 [S1 문서](api/s1-users-links.md) |
 | 15  | DELETE /v1/guardian/links/{elderId}      | api-fn |                                                                                                  |
 | 16  | POST /v1/elder/guide                     | ai-fn  | 5장                                                                                              |
@@ -206,15 +206,15 @@
 
 ### 4.3 추가 엔드포인트 (Firestore 직접 읽기 대체) — 제안
 
-| #   | 메서드 · 경로                                 | 호출   | 대체하는 것                                               |
-| --- | --------------------------------------------- | ------ | --------------------------------------------------------- |
-| 18  | GET /v1/elder/links                           | 고령자 | links(elderId == 나) 조회                                 |
-| 19  | GET /v1/elder/approvals/{id}                  | 고령자 | approvals/{id} 구독 (FCM 못 받았을 때 폴링)               |
-| 20  | GET /v1/guardian/links                        | 보호자 | links(guardianId == 나) 조회                              |
-| 21  | GET /v1/guardian/notifications?cursor=&since= | 보호자 | notifications 구독 (최신순 페이지, since·serverTime 폴링) |
-| 22  | POST /v1/guardian/notifications/{id}/read     | 보호자 | 보호자별 readAt (204)                                     |
-| 23  | GET /v1/guardian/approvals?status=pending     | 보호자 | approvals 구독                                            |
-| 24  | GET /v1/guardian/approvals/{id}               | 보호자 | 승인 상세(남은 시간)                                      |
+| #   | 메서드 · 경로                                         | 호출   | 대체하는 것                                               |
+| --- | ----------------------------------------------------- | ------ | --------------------------------------------------------- |
+| 18  | GET /v1/elder/links                                   | 고령자 | links(elderId == 나) 조회                                 |
+| 19  | GET /v1/elder/approvals/{id}                          | 고령자 | approvals/{id} 구독 (FCM 못 받았을 때 폴링)               |
+| 20  | GET /v1/guardian/links                                | 보호자 | links(guardianId == 나) 조회                              |
+| 21  | GET /v1/guardian/notifications?cursor=&since=         | 보호자 | notifications 구독 (최신순 페이지, since·serverTime 폴링) |
+| 22  | POST /v1/guardian/notifications/{id}/read             | 보호자 | 보호자별 readAt (204)                                     |
+| 23  | GET /v1/guardian/approvals?status=pending\|all&since= | 보호자 | approvals 구독 (지난 요청 포함, since·serverTime 폴링)    |
+| 24  | GET /v1/guardian/approvals/{id}                       | 보호자 | 승인 상세(남은 시간)                                      |
 
 ### 4.4 실시간성 대체 방식
 
@@ -373,7 +373,7 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 | S0.5 ✅ | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
 | S1 ✅   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
 | S2 ✅   | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency. 계약: [docs/api/s2-notifications.md](api/s2-notifications.md)                                | 시연 SOS·정부24 L1 |
-| S3      | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
+| S3 ✅   | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn. 계약: [docs/api/s3-approvals.md](api/s3-approvals.md)                                        | 시연 정부24 L2     |
 | S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
 | S5 ✅   | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |
 | S6      | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
@@ -634,7 +634,7 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 | 6   | ~~LLM 호출 경로~~ → **확정: Anthropic API 직접, Sonnet 5.5**. 남은 것: #17 4초 목표를 Sonnet으로 맞추는지 S4에서 측정 후 재협의          | 서버 팀 · 고령자 앱   |
 | 7   | #17 실패 시 응답 형태 (오류 vs 규칙 결과 200)                                                                                            | 고령자 앱             |
 | 8   | 어르신별 일일 AI 호출 한도 값                                                                                                            | 전체                  |
-| 9   | 연결 해제 시 기존 알림·승인 기록 처리                                                                                                    | 보호자 앱             |
+| 9   | ~~연결 해제 시 기존 알림·승인 기록 처리~~ → **확정**: 그 보호자 목록에서 삭제, 남은 보호자 없으면 대기 중 승인 취소                      | 보호자 앱             |
 | 10  | 캐싱 설계 반영 (9장)                                                                                                                     | 사용자 → 서버 팀      |
 | 11  | ~~Anthropic API 키 등록~~ → **dev 등록 완료**. 남은 것: prod 키 (dev와 분리 권장)                                                        | 사용자                |
 | 12  | ~~AWS 계정 구성~~ → **확정: dev·prod 한 계정** (이름 접두사 `haebom-<env>-`와 환경별 배포 역할·권한 경계로 분리). 남은 것: 커스텀 도메인 | 서버 팀               |

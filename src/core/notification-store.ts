@@ -14,6 +14,7 @@ import {
 import {
   BatchWriteCommand,
   DynamoDBDocumentClient,
+  GetCommand,
   QueryCommand,
   TransactWriteCommand,
   UpdateCommand,
@@ -190,6 +191,67 @@ export function createAwsNotificationStore(
         if (error instanceof ConditionalCheckFailedException) return false;
         throw error;
       }
+    },
+
+    async getInbox(guardianId, id) {
+      const out = await doc.send(
+        new GetCommand({
+          TableName: table,
+          Key: { PK: `GUARDIAN#${guardianId}`, SK: `NOTI#${id}` },
+          ConsistentRead: true,
+        }),
+      );
+      return out.Item?.type === "inbox" ? toInbox(out.Item) : undefined;
+    },
+
+    async markAllRead(guardianId, readAt, elderId) {
+      const keys: Item[] = [];
+      let start: Record<string, unknown> | undefined;
+      do {
+        const out = await doc.send(
+          new QueryCommand({
+            TableName: table,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            FilterExpression:
+              "attribute_not_exists(readAt)" + (elderId === undefined ? "" : " AND elderId = :eid"),
+            ExpressionAttributeValues: {
+              ":pk": `GUARDIAN#${guardianId}`,
+              ":sk": "NOTI#",
+              ...(elderId === undefined ? {} : { ":eid": elderId }),
+            },
+            ProjectionExpression: "PK, SK",
+            ExclusiveStartKey: start,
+          }),
+        );
+        keys.push(...(out.Items ?? []));
+        start = out.LastEvaluatedKey;
+      } while (start !== undefined);
+
+      let updated = 0;
+      for (let i = 0; i < keys.length; i += 10) {
+        const results = await Promise.all(
+          keys.slice(i, i + 10).map(async (Key) => {
+            try {
+              await doc.send(
+                new UpdateCommand({
+                  TableName: table,
+                  Key: { PK: Key.PK, SK: Key.SK },
+                  UpdateExpression: "SET readAt = if_not_exists(readAt, :at)",
+                  ConditionExpression: "attribute_exists(PK)",
+                  ExpressionAttributeValues: { ":at": readAt },
+                }),
+              );
+              return 1;
+            } catch (error) {
+              // 그 사이 해제·삭제된 항목은 건너뛴다.
+              if (error instanceof ConditionalCheckFailedException) return 0;
+              throw error;
+            }
+          }),
+        );
+        updated += results.reduce<number>((a, b) => a + b, 0);
+      }
+      return updated;
     },
 
     async deleteInboxForElder(guardianId, elderId) {
