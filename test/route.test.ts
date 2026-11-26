@@ -322,8 +322,8 @@ describe("고르기 (select)", () => {
       questionId: "goal:gov24",
       say: "등본인가요, 초본인가요?",
       options: [
-        { id: "gov24.resident_copy", name: "등본" },
-        { id: "gov24.resident_abstract", name: "초본" },
+        { id: "gov24.resident_copy", name: "등본", level: "L2", verified: true },
+        { id: "gov24.resident_abstract", name: "초본", level: "L2", verified: true },
       ],
     });
   });

@@ -29,9 +29,19 @@ export interface MaskResult {
   count: number;
 }
 
+/**
+ * 인증번호·비밀번호처럼 짧은 숫자는 위 패턴에 안 걸린다 → 이름표가 붙어 있을 때만 숫자를 가린다
+ * ("인증번호 123456", "비밀번호는 1234", "OTP: 987654"). 이름표는 남긴다.
+ */
+const SECRET_NUMBER =
+  /(인증\s*번호|인증\s*코드|비밀\s*번호|비번|암호|OTP|otp|PIN|pin|핀\s*번호|보안\s*카드(?:\s*번호)?)(\s*(?:는|은|이|가|을|를)?\s*[:=]?\s*)\d(?:[\d\s-]*\d)?/g;
+
 export function maskText(input: string): MaskResult {
   let count = 0;
-  let text = input;
+  let text = input.replace(SECRET_NUMBER, (_match, label: string, gap: string) => {
+    count += 1;
+    return `${label}${gap}${MASK}`;
+  });
   PATTERNS.forEach((pattern, index) => {
     text = text.replace(pattern, (match) => {
       // 하이픈 패턴은 숫자가 10자리 이상일 때만 (날짜 2026-11-26 같은 것 제외)
