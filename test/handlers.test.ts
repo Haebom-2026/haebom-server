@@ -27,8 +27,8 @@ describe("ai-fn", () => {
     expect(parseBody(result.body)).toMatchObject({ error: { reason: "unauthenticated" } });
   });
 
-  it("인증되면 아직 501 not-implemented", async () => {
-    const result = await aiHandler(httpEvent("POST", "/v1/elder/guide", "uid-1"), lambdaContext);
+  it("classify 는 인증되면 아직 501 not-implemented", async () => {
+    const result = await aiHandler(httpEvent("POST", "/v1/elder/classify", "uid-1"), lambdaContext);
     expect(result.statusCode).toBe(501);
   });
 });
