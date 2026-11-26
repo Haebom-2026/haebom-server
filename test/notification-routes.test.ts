@@ -134,7 +134,7 @@ describe("#6 민감 앱 알림", () => {
     expect(g2.items[0]).toMatchObject({ elderLabel: "장모님" });
   });
 
-  it("같은 앱은 10분에 한 번, 다른 앱은 따로", async () => {
+  it("같은 앱은 5분에 한 번, 다른 앱은 따로", async () => {
     await ctx.link(G1, "어머니");
     await ctx.call("POST", "/v1/elder/sensitive-entries", ELDER, toss);
     const again = await ctx.call("POST", "/v1/elder/sensitive-entries", ELDER, toss);
@@ -148,7 +148,11 @@ describe("#6 민감 앱 알림", () => {
     });
     expect(other.status).toBe(201);
 
-    ctx.advance(10 * 60_000 + 1);
+    ctx.advance(4 * 60_000);
+    expect((await ctx.call("POST", "/v1/elder/sensitive-entries", ELDER, toss)).body).toEqual({
+      result: "duplicate_suppressed",
+    });
+    ctx.advance(60_000 + 1);
     expect((await ctx.call("POST", "/v1/elder/sensitive-entries", ELDER, toss)).status).toBe(201);
   });
 

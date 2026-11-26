@@ -309,3 +309,59 @@ describe("#12·#15 해제", () => {
     expect(again).toMatchObject({ status: 404, body: { error: { reason: "not-found" } } });
   });
 });
+
+describe("호칭 변경", () => {
+  it("보호자는 어르신 호칭을, 어르신은 보호자 호칭을 바꾼다. 양쪽 목록에 반영", async () => {
+    const ctx = setup();
+    await register(ctx);
+    await linkWithCode(ctx, GUARDIAN);
+
+    const g = await ctx.call("PATCH", `/v1/guardian/links/${ELDER}`, GUARDIAN, {
+      elderLabel: "엄마",
+    });
+    expect(g).toMatchObject({
+      status: 200,
+      body: { elderId: ELDER, elderLabel: "엄마", guardianLabel: "큰딸" },
+    });
+
+    const e = await ctx.call("PATCH", `/v1/elder/links/${GUARDIAN}`, ELDER, {
+      guardianLabel: "수연이",
+    });
+    expect(e).toMatchObject({
+      status: 200,
+      body: { guardianId: GUARDIAN, guardianLabel: "수연이", elderLabel: "엄마" },
+    });
+
+    const list = (await ctx.call("GET", "/v1/guardian/links", GUARDIAN)).body as {
+      links: { elderLabel: string; guardianLabel: string }[];
+    };
+    expect(list.links[0]).toMatchObject({ elderLabel: "엄마", guardianLabel: "수연이" });
+  });
+
+  it("빈 문자열은 호칭 지우기, 둘 다 없으면 400, 연결이 없으면 404, 역할이 다르면 403", async () => {
+    const ctx = setup();
+    await register(ctx);
+    await linkWithCode(ctx, GUARDIAN);
+
+    const cleared = await ctx.call("PATCH", `/v1/guardian/links/${ELDER}`, GUARDIAN, {
+      elderLabel: "",
+    });
+    expect(cleared.body).toMatchObject({ elderLabel: "" });
+    expect((await ctx.call("PATCH", `/v1/guardian/links/${ELDER}`, GUARDIAN, {})).status).toBe(400);
+    expect(
+      (
+        await ctx.call("PATCH", `/v1/guardian/links/${ELDER}`, GUARDIAN, {
+          elderLabel: "가".repeat(21),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await ctx.call("PATCH", `/v1/guardian/links/${ELDER}`, GUARDIAN2, { elderLabel: "엄마" }))
+        .body,
+    ).toMatchObject({ error: { reason: "not-found" } });
+    expect(
+      (await ctx.call("PATCH", `/v1/elder/links/${GUARDIAN}`, GUARDIAN, { guardianLabel: "x" }))
+        .status,
+    ).toBe(403);
+  });
+});

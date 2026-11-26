@@ -40,7 +40,14 @@ export interface PromptNode {
   state?: string[];
 }
 
-export const NODE_STATES = ["clickable", "editable", "scrollable", "checked", "selected"] as const;
+export const NODE_STATES = [
+  "clickable",
+  "editable",
+  "scrollable",
+  "checked",
+  "selected",
+  "focused",
+] as const;
 export const TARGET_TEXT_MAX = 100;
 
 export interface GuidePromptInput {
@@ -91,11 +98,38 @@ export interface GuideTrace {
 const SECRET_FIELD =
   /비밀\s?번호|패스워드|password|passcode|암호|인증\s?번호|OTP|보안\s?카드|CVC|CVV|PIN\b|핀\s?번호|주민\s?(등록)?\s?번호|생년월일\s?6자리/i;
 
-/** 비밀번호·인증번호 입력 화면이면 화면을 모델에 보내지 않는다. */
+/** 이름표로 볼 만큼 짧은 글자 (긴 안내 문구는 이름표가 아님) */
+const LABEL_MAX = 30;
+
+const secretText = (node: { t?: string | undefined; d?: string | undefined }): string | undefined =>
+  [node.t, node.d].find((text) => text !== undefined && SECRET_FIELD.test(text));
+
+/**
+ * 비밀번호·인증번호 **입력 칸**이 있는 화면이면 화면을 모델에 보내지 않는다.
+ * 입력 칸 자신의 글자(힌트), 또는 입력 칸 바로 위·왼쪽·안쪽의 짧은 이름표만 본다.
+ * "주민등록번호는 직접 입력하세요" 같은 안내 문구만 있는 화면은 막지 않는다 (고령자 앱 요청).
+ */
 export function isSecretScreen(request: GuideRequest): boolean {
-  return request.screen.nodes.some((node) =>
-    [node.t, node.d].some((text) => text !== undefined && SECRET_FIELD.test(text)),
-  );
+  const { nodes, height } = request.screen;
+  const fields = nodes.filter((node) => node.editable === true);
+  if (fields.length === 0) return false;
+  if (fields.some((field) => secretText(field) !== undefined)) return true;
+
+  const gap = height * 0.08; // 이름표와 칸 사이 거리 (화면 높이의 8%)
+  const near = (label: Bounds, field: Bounds): boolean => {
+    const overlapX = label[0] < field[2] && field[0] < label[2];
+    const overlapY = label[1] < field[3] && field[1] < label[3];
+    const above = overlapX && label[3] <= field[1] + 2 && field[1] - label[3] <= gap;
+    const left = overlapY && label[2] <= field[0] + 2;
+    return above || left || contains(field, label);
+  };
+  return nodes.some((node) => {
+    const text = node.editable === true ? undefined : secretText(node);
+    if (text === undefined || text.length > LABEL_MAX) return false;
+    const label = node.b;
+    // 위치를 모르면 보수적으로 이름표로 본다
+    return fields.some((field) => !label || !field.b || near(label, field.b));
+  });
 }
 
 const shortClass = (name: string | undefined): string | undefined =>
@@ -126,7 +160,10 @@ export function toPromptInput(
       const [l, t, r, b] = node.b;
       out.pos = [percent(l, width), percent(t, height), percent(r, width), percent(b, height)];
     }
-    const state = NODE_STATES.filter((name) => (node as Record<string, unknown>)[name] === true);
+    const flags = node as Record<string, unknown>;
+    const state: string[] = NODE_STATES.filter((name) => flags[name] === true);
+    // enabled 는 false 일 때만 의미가 있다 (회색 '다음' 버튼)
+    if (flags.enabled === false) state.push("disabled");
     if (state.length > 0) out.state = state;
     return out;
   });
