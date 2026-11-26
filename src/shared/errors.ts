@@ -9,7 +9,13 @@ export type ErrorReason =
   | "rate-limited"
   | "unavailable"
   | "not-implemented"
-  | "internal";
+  | "internal"
+  // 연결 코드 (#14, 보호자 앱 요청 2.3)
+  | "invalid-code"
+  | "code-expired"
+  | "code-used"
+  | "already-linked"
+  | "too-many-attempts";
 
 const STATUS_BY_REASON: Record<ErrorReason, number> = {
   unauthenticated: 401,
@@ -22,6 +28,11 @@ const STATUS_BY_REASON: Record<ErrorReason, number> = {
   unavailable: 503,
   "not-implemented": 501,
   internal: 500,
+  "invalid-code": 404,
+  "code-expired": 409,
+  "code-used": 409,
+  "already-linked": 409,
+  "too-many-attempts": 429,
 };
 
 export class ApiError extends Error {
