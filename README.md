@@ -32,9 +32,11 @@ npm run check
 
 ## 처음 배포 (한 번만)
 
+> **AWS 계정: `045861054142` (서울 `ap-northeast-2`)**. Terraform의 `allowed_account_ids`와 `scripts/dev-deploy.sh`가 다른 계정 자격 증명이면 실행을 거부한다. 기본 프로필이 다른 계정이면 `AWS_PROFILE`을 이 계정 프로필로 지정한다.
+
 ### 1. bootstrap
 
-관리자 권한 AWS 자격 증명으로 실행한다. state는 로컬에 남으므로 `infra/bootstrap/terraform.tfstate`를 안전한 곳에 보관한다 (git에 올라가지 않음).
+`045861054142` 계정의 관리자 권한 자격 증명으로 실행한다 (예: `AWS_PROFILE=<프로필> terraform -chdir=infra/bootstrap apply`). state는 로컬에 남으므로 `infra/bootstrap/terraform.tfstate`를 안전한 곳에 보관한다 (git에 올라가지 않음).
 
 ```bash
 terraform -chdir=infra/bootstrap init
@@ -82,7 +84,7 @@ PR을 올리면 검사와 함께 prod `terraform plan` 결과가 job summary에 
 
 ### dev 로컬 배포
 
-현재 AWS 자격 증명(`AWS_PROFILE` 등)으로 실행한다. 빌드 → `terraform init`(state 버킷은 계정 ID로 자동 계산) → plan/apply까지 한 번에 한다. apply는 Terraform이 변경 내용을 보여 주고 `yes` 입력을 받는다.
+현재 AWS 자격 증명(`AWS_PROFILE` 등)으로 실행하고, 계정이 `045861054142`가 아니면 멈춘다. `npm run dev:apply -- -auto-approve`처럼 뒤에 붙인 인자는 Terraform에 그대로 넘어간다. 빌드 → `terraform init`(state 버킷은 계정 ID로 자동 계산) → plan/apply까지 한 번에 한다. apply는 Terraform이 변경 내용을 보여 주고 `yes` 입력을 받는다.
 
 ```bash
 npm run dev:plan
