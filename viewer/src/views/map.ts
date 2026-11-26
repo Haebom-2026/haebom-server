@@ -4,6 +4,8 @@
  * 앱(pkg)마다 색이 다르고, 혼자인 점(같은 화면이 하나뿐)은 속이 빈 원.
  * 규칙을 바꾸면 묶음이 다시 계산된다 → 지문이 얼마나 갈리는지 한눈에 본다.
  * "묶어 보기"(기본)에서는 같은 화면 묶음 하나 = 점 하나(크기 ∝ 화면 수), 누르면 묶음 안 화면 목록.
+ * "실시간"으로 기기를 고르면 그 기기에 새 화면이 들어올 때마다 매칭된 점을 깜빡이고,
+ * 최근 이동을 화살표로 잇고, 오른쪽에 그 화면과 서버 매칭 결과를 보여 준다.
  */
 import {
   forceCollide,
@@ -19,11 +21,13 @@ import {
 import { api } from "../api.ts";
 import { fpHue, h, matchLine, s, time } from "../dom.ts";
 import { RULES, isActionable, ruleKey, type RuleId } from "../fp-rules.ts";
-import { every } from "../subscribe.ts";
+import { every, subscribeScreens, type Subscription } from "../subscribe.ts";
 import type { Device, ScreenDocument, ScreenSummary } from "../types.ts";
 import { renderScreen } from "./screen-panel.ts";
 
 const REFRESH_MS = 10_000;
+/** 실시간: 지도에 화살표로 이어 보여 줄 최근 화면 수 */
+const TRAIL = 6;
 const MAX_PER_DEVICE = 500;
 const CONCURRENCY = 8;
 const R = 5;
@@ -91,6 +95,13 @@ export function mapView(root: HTMLElement): () => void {
   let lastGroups = new Map<string, ScreenDocument[]>();
   let lastPkgs: string[] = [];
   let view = { x: 0, y: 0, w: 800, h: 600 };
+  // 실시간
+  let liveDevice = "";
+  let liveSub: Subscription | undefined;
+  /** 새 화면이 오면 오른쪽 패널을 그 화면으로 바꾼다 (점을 눌러 다른 걸 보면 멈춤) */
+  let following = true;
+  /** 그 기기의 최근 화면들, 오래된 순 */
+  let trail: ScreenDocument[] = [];
 
   const status = h("span", { class: "muted small" }, "불러오는 중…");
   const stats = h("div", { class: "map-stats" });
@@ -140,6 +151,11 @@ export function mapView(root: HTMLElement): () => void {
       ),
     ),
   );
+  const liveSelect = h("select", {
+    class: "live-select",
+    title: "고른 기기에 새 화면이 들어오면 지도에서 어디인지 바로 보여 줘요",
+    onchange: (e: Event) => startLive((e.target as HTMLSelectElement).value),
+  });
   const deviceSelect = h("select", {
     onchange: (e: Event) => {
       deviceFilter = (e.target as HTMLSelectElement).value;
@@ -150,8 +166,37 @@ export function mapView(root: HTMLElement): () => void {
   const linkLayer = s("g", { class: "links" });
   const dotLayer = s("g", { class: "dots" });
   const countLayer = s("g", { class: "counts" });
+  const trailLayer = s("g", { class: "trail" });
+  const pulseLayer = s("g", { class: "pulse" });
+  const defs = s(
+    "defs",
+    {},
+    s(
+      "marker",
+      {
+        id: "trail-arrow",
+        viewBox: "0 0 10 10",
+        refX: 9,
+        refY: 5,
+        markerWidth: 7,
+        markerHeight: 7,
+        orient: "auto-start-reverse",
+      },
+      s("path", { d: "M0,0 L10,5 L0,10 z" }),
+    ),
+  );
   const labelLayer = s("g", { class: "labels" });
-  const svg = s("svg", { class: "map" }, linkLayer, dotLayer, countLayer, labelLayer);
+  const svg = s(
+    "svg",
+    { class: "map" },
+    defs,
+    linkLayer,
+    trailLayer,
+    dotLayer,
+    pulseLayer,
+    countLayer,
+    labelLayer,
+  );
   const tip = h("div", { class: "map-tip", hidden: true });
   const canvas = h("div", { class: "map-canvas" }, svg, tip);
   const panel = h("div", { class: "screen-panel map-panel" });
@@ -168,6 +213,7 @@ export function mapView(root: HTMLElement): () => void {
         ruleSeg,
         modeSeg,
         deviceSelect,
+        liveSelect,
         stats,
       ),
       h(
@@ -234,6 +280,16 @@ export function mapView(root: HTMLElement): () => void {
   }
 
   function renderDeviceSelect() {
+    liveSelect.replaceChildren(
+      h("option", { value: "" }, "실시간 끔"),
+      ...devices.map((d) =>
+        h(
+          "option",
+          { value: d.deviceId, selected: d.deviceId === liveDevice },
+          `● 실시간: ${d.label ?? d.deviceId.slice(0, 8)}`,
+        ),
+      ),
+    );
     deviceSelect.replaceChildren(
       h("option", { value: "" }, `기기 전체 (${devices.length}대)`),
       ...devices.map((d) =>
@@ -342,7 +398,11 @@ export function mapView(root: HTMLElement): () => void {
     renderStats(groups, pkgs);
     if (selected && !dots.has(selected.id)) selected = undefined;
     if (selected) selected = dots.get(selected.id);
-    if (!selected) renderOverview(groups, pkgs);
+    drawLive();
+    if (!selected) {
+      if (!liveDevice) renderOverview(groups, pkgs);
+      else if (following) renderLive();
+    }
   }
 
   /** 묶어 보기: 묶음 안 판단 보류 화면 수, 낱개: 그 화면이 판단 보류면 1 */
@@ -577,11 +637,233 @@ export function mapView(root: HTMLElement): () => void {
         onclick: () => {
           selected = undefined;
           for (const el of dotLayer.querySelectorAll("circle")) el.classList.remove("selected");
-          renderOverview(lastGroups, lastPkgs);
+          if (liveDevice) {
+            following = true;
+            renderLive();
+          } else renderOverview(lastGroups, lastPkgs);
         },
       },
-      "닫기",
+      liveDevice ? "● 실시간으로 돌아가기" : "닫기",
     );
+
+  // ---------------------------------------------------------------------------
+  // 실시간
+  // ---------------------------------------------------------------------------
+
+  /** 지금 보기에서 그 화면이 들어간 점 */
+  const dotOf = (doc: ScreenDocument) =>
+    dots.get(mode === "group" ? `g:${ruleKey(doc, rule)}` : doc.screenId);
+
+  function startLive(deviceId: string) {
+    liveSub?.stop();
+    liveSub = undefined;
+    liveDevice = deviceId;
+    following = true;
+    selected = undefined;
+    svg.classList.toggle("live", deviceId !== "");
+    const mine = summaries
+      .filter((x) => x.deviceId === deviceId)
+      .sort((a, b) => a.screenId.localeCompare(b.screenId));
+    trail = deviceId
+      ? mine
+          .slice(-TRAIL)
+          .map((x) => docCache.get(x.screenId))
+          .filter((d): d is ScreenDocument => d !== undefined)
+      : [];
+    if (deviceId) {
+      liveSub = subscribeScreens(
+        deviceId,
+        mine[mine.length - 1]?.screenId,
+        (items) => void onLive(items),
+        (error) => {
+          status.textContent = `실시간 수신 실패: ${(error as Error).message}`;
+          status.className = "error small";
+        },
+      );
+    }
+    drawLive();
+    if (deviceId) renderLive();
+    else renderOverview(lastGroups, lastPkgs);
+    const current = trail[trail.length - 1];
+    if (current) reveal(current);
+  }
+
+  async function onLive(items: ScreenSummary[]) {
+    const known = new Set(summaries.map((x) => x.screenId));
+    for (const item of items) if (!known.has(item.screenId)) summaries.push(item);
+    const docs: ScreenDocument[] = [];
+    for (const item of items) {
+      let doc = docCache.get(item.screenId);
+      if (!doc) {
+        try {
+          doc = await api.screen(item.deviceId, item.screenId);
+          docCache.set(item.screenId, doc);
+        } catch {
+          continue;
+        }
+      }
+      docs.push(doc);
+    }
+    // 기다리는 사이 기기를 바꿨으면 이전 기기의 응답은 버린다
+    if (disposed || items[0]?.deviceId !== liveDevice) return;
+    trail = [...trail, ...docs].slice(-TRAIL);
+    if (following) selected = undefined;
+    // 새 점(새 페이지)이 생길 수 있으므로 다시 배치 (기존 점 자리는 유지)
+    rebuild(false);
+    const current = trail[trail.length - 1];
+    if (current) reveal(current);
+  }
+
+  /** 지도 밖이면 그 점이 가운데 오도록 옮긴다 */
+  function reveal(doc: ScreenDocument) {
+    const dot = dotOf(doc);
+    if (!dot || dot.x === undefined || dot.y === undefined) return;
+    const m = Math.min(view.w, view.h) * 0.08;
+    const inside =
+      dot.x > view.x + m &&
+      dot.x < view.x + view.w - m &&
+      dot.y > view.y + m &&
+      dot.y < view.y + view.h - m;
+    if (inside) return;
+    view = { ...view, x: dot.x - view.w / 2, y: dot.y - view.h / 2 };
+    applyView();
+  }
+
+  /** 지도 위: 최근 이동 화살표, 지금 점 깜빡임, 판단 보류면 2등 점도 표시 */
+  function drawLive() {
+    for (const el of dotLayer.querySelectorAll("circle.live-runner"))
+      el.classList.remove("live-runner");
+    const current = trail[trail.length - 1];
+    if (!liveDevice || !current) {
+      trailLayer.replaceChildren();
+      pulseLayer.replaceChildren();
+      return;
+    }
+    // 같은 점에 연달아 머문 것은 하나로
+    const path: Dot[] = [];
+    for (const doc of trail) {
+      const dot = dotOf(doc);
+      if (dot && path[path.length - 1] !== dot) path.push(dot);
+    }
+    trailLayer.replaceChildren(
+      ...path.slice(1).map((to, i) => {
+        const from = path[i] ?? to;
+        const dx = (to.x ?? 0) - (from.x ?? 0);
+        const dy = (to.y ?? 0) - (from.y ?? 0);
+        const len = Math.hypot(dx, dy) || 1;
+        const cut = (r: number) => (r + 2) / len;
+        return s("line", {
+          x1: (from.x ?? 0) + dx * cut(from.r),
+          y1: (from.y ?? 0) + dy * cut(from.r),
+          x2: (to.x ?? 0) - dx * cut(to.r),
+          y2: (to.y ?? 0) - dy * cut(to.r),
+          "marker-end": "url(#trail-arrow)",
+          style: `opacity:${0.35 + (0.65 * (i + 1)) / Math.max(1, path.length - 1)}`,
+        });
+      }),
+    );
+    const dot = dotOf(current);
+    pulseLayer.replaceChildren(
+      ...(dot
+        ? [
+            s("circle", { class: "ring", cx: dot.x ?? 0, cy: dot.y ?? 0, r: dot.r + 3 }),
+            s("circle", { class: "now", cx: dot.x ?? 0, cy: dot.y ?? 0, r: dot.r + 3 }),
+          ]
+        : []),
+    );
+    const runner = current.match?.kind === "ambiguous" ? current.match.runnerUp : undefined;
+    if (runner && rule === "page") {
+      const key = `${current.pkg}#page:${runner.pageId}`;
+      for (const el of dotLayer.querySelectorAll<SVGCircleElement>("circle")) {
+        if (dots.get(el.dataset.id ?? "")?.key === key) el.classList.add("live-runner");
+      }
+    }
+  }
+
+  /** 오른쪽: 지금 화면 + 서버 매칭 결과 + 최근 이동 */
+  function renderLive() {
+    const current = trail[trail.length - 1];
+    const head = h(
+      "div",
+      { class: "map-panel-head" },
+      h(
+        "span",
+        {},
+        h("span", { class: "live-dot" }),
+        h("b", {}, "실시간"),
+        h("span", { class: "muted small" }, ` · ${deviceName(liveDevice)}`),
+      ),
+      h(
+        "button",
+        {
+          class: "link small",
+          onclick: () => {
+            liveSelect.value = "";
+            startLive("");
+          },
+        },
+        "끄기",
+      ),
+    );
+    if (!current) {
+      panel.replaceChildren(head, h("p", { class: "muted small" }, "새 화면을 기다리는 중…"));
+      return;
+    }
+    const dot = dotOf(current);
+    const kind = current.match?.kind;
+    const verdict =
+      kind === "exact"
+        ? "이미 본 화면 (같은 지문)"
+        : kind === "similar"
+          ? "이미 본 페이지와 비슷함"
+          : kind === "ambiguous"
+            ? "판단 보류 — 비슷한 페이지가 둘"
+            : kind === "new"
+              ? "처음 보는 페이지"
+              : "매칭 결과 없음";
+    const recent = [...trail].reverse();
+    panel.replaceChildren(
+      head,
+      h(
+        "div",
+        { class: `live-verdict live-${kind ?? "none"}` },
+        h("div", { class: "live-verdict-title" }, verdict),
+        current.match ? h("div", { class: "small" }, matchLine(current.match)) : "",
+        h(
+          "div",
+          { class: "muted small" },
+          `${current.pkg} · ${time(current.capturedAt)}`,
+          dot && dot.members.length > 1 ? ` · 이 묶음 화면 ${dot.members.length}개` : "",
+        ),
+      ),
+      h(
+        "ol",
+        { class: "live-recent" },
+        recent.map((doc, i) =>
+          h(
+            "li",
+            { class: i === 0 ? "now" : "" },
+            h("span", { class: "swatch", style: `--h:${fpHue(doc.pkg)}` }),
+            h("span", { class: "small" }, time(doc.capturedAt)),
+            h(
+              "span",
+              { class: `small match-${doc.match?.kind ?? "none"}` },
+              ` ${doc.match?.kind ?? "-"}`,
+            ),
+            h(
+              "span",
+              { class: "muted small ellipsis" },
+              ` ${labelOf(doc).slice(0, 2).join(" · ")}`,
+            ),
+          ),
+        ),
+      ),
+      renderScreen(current, {
+        sameBefore: dot?.members[dot.members.indexOf(current) - 1],
+        seenCount: (dot?.members.indexOf(current) ?? 0) + 1,
+      }),
+    );
+  }
 
   /** 묶음 점을 눌렀을 때: 안의 화면 목록 (최근 순). 항목을 누르면 그 화면 */
   function renderGroupList(dot: Dot) {
@@ -671,6 +953,7 @@ export function mapView(root: HTMLElement): () => void {
 
   function select(dot: Dot) {
     selected = dot;
+    following = false;
     for (const el of dotLayer.querySelectorAll<SVGCircleElement>("circle")) {
       el.classList.toggle("selected", el.dataset.id === dot.id);
     }
@@ -794,6 +1077,7 @@ export function mapView(root: HTMLElement): () => void {
   return () => {
     disposed = true;
     sub.stop();
+    liveSub?.stop();
     sim?.stop();
   };
 }
