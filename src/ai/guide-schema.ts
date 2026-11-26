@@ -35,7 +35,10 @@ export const guideRequestSchema = z.object({
   /** guide: 말로 이끌어 드림(기본), solo: 혼자 하다가 막힐 때 보는 힌트 */
   mode: z.enum(["guide", "solo"]).default("guide"),
   screen: screenSchema,
-  /** (dev 디버그용, 선택) 디버그 뷰어 기기 ID. 이 기기 아래에 요청·판단이 기록된다. 서버 동작에는 영향 없음 */
+  /**
+   * (선택) 기기마다 고정된 ID. dev: 디버그 뷰어의 이 기기 아래에 요청·판단이 기록되고, 지도 학습의
+   * "기기 2대" 기준이 된다 (없으면 uid 가상 기기 → 지도에 반영 안 함). 안내 응답에는 영향 없음, prod 는 무시
+   */
   deviceId: deviceIdSchema.optional(),
   /** (선택) classify 의 명령 번호. 명령 단계 기록·지도 학습에 쓴다 (docs/jev-routing-plan.md 3.6·6장) */
   commandId: z.number().int().nonnegative().optional(),
