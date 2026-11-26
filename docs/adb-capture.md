@@ -27,13 +27,13 @@ npm run capture
 
 ```
 [17:01:37] 기기 100.100.172.233:43041 (SM-F711N, Android 13) → deviceId adb-R3CR80QJAVT
-[16:53:37] API https://9a2sj8hqlb.execute-api.ap-northeast-2.amazonaws.com
+[16:53:37] API https://qq829otaql.execute-api.ap-northeast-2.amazonaws.com
 [16:53:54] 화면 저장 com.android.settings 노드 27개 지문 7ceef2272d6b3dd2
 [16:54:08] 화면 저장 com.android.settings 노드 20개 지문 d43044b59d99137f
 ```
 
 - 5초마다 heartbeat, 1.5초마다 화면을 읽어 바뀌었을 때만 보낸다. `Ctrl+C` 로 끝낸다.
-- 뷰어(`https://d3jcc37k40jy8z.cloudfront.net`)에 `adb-<기기 고유 번호>` 기기로 나타난다 (`ro.serialno`, 예: `adb-R3CR80QJAVT`). 무선 디버깅은 adb 시리얼이 `IP:포트` 라 연결마다 바뀌므로 기기 고유 번호를 쓴다. 이름을 붙여 두면 구분하기 쉽다.
+- 뷰어(`https://dv888sh4vt1v6.cloudfront.net`)에 `adb-<기기 고유 번호>` 기기로 나타난다 (`ro.serialno`, 예: `adb-R3CR80QJAVT`). 무선 디버깅은 adb 시리얼이 `IP:포트` 라 연결마다 바뀌므로 기기 고유 번호를 쓴다. 이름을 붙여 두면 구분하기 쉽다.
 
 | 옵션                | 뜻                                                        |
 | ------------------- | --------------------------------------------------------- |
