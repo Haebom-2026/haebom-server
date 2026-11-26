@@ -1,0 +1,20 @@
+{
+  "name": "haebom-debug-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "디버그 뷰어 (docs/server-plan.md 12장, dev 전용)",
+  "scripts": {
+    "dev": "vite",
+    "mock": "vite --mode mock",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase": "^13.4.0"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "vite": "^8.3.8"
+  }
+}

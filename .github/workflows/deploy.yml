@@ -1,0 +1,56 @@
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment 이름 (현재 prod 만 사용)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    # environment 이름이 OIDC sub 에 들어가 haebom-gha-deploy-<env> 역할만 assume 할 수 있다.
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci && npm run build
+      - name: check deploy role
+        if: vars.AWS_DEPLOY_ROLE_ARN == ''
+        run: |
+          echo "::error::GitHub environment '${{ inputs.environment }}' 에 AWS_DEPLOY_ROLE_ARN 변수가 없습니다 (infra/bootstrap 출력 deploy_role_arns)."
+          exit 1
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-2
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.8"
+          terraform_wrapper: false
+      - name: terraform apply
+        working-directory: infra/envs/${{ inputs.environment }}
+        env:
+          TF_IN_AUTOMATION: "true"
+        run: |
+          terraform init -input=false -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          terraform plan -input=false -no-color -var "app_version=${{ github.sha }}" -out=tfplan
+          terraform apply -input=false -no-color tfplan
+      - name: smoke test
+        working-directory: infra/envs/${{ inputs.environment }}
+        run: |
+          endpoint="$(terraform output -raw api_endpoint)"
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors \
+            "$endpoint/v1/healthz"
