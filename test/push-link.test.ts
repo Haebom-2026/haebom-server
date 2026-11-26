@@ -138,7 +138,7 @@ describe("push-fn: 보호자 알림함", () => {
         elderId: "e1",
       },
       notification: {
-        title: "해봄",
+        title: "해봄 가족",
         body: "새 가족 알림이 도착했습니다.",
         channelId: "family_activity",
         urgent: false,
@@ -157,10 +157,87 @@ describe("push-fn: 보호자 알림함", () => {
         record("REMOVE", inboxImage(), "4"),
       ],
     });
-    expect(d.sent.map((m) => [m.notification?.channelId, m.notification?.urgent])).toEqual([
-      ["help_alerts", true],
-      ["sos_alerts", true],
-      ["sos_alerts", true],
+    expect(
+      d.sent.map((m) => [m.notification?.channelId, m.notification?.urgent, m.notification?.title]),
+    ).toEqual([
+      ["help_alerts", true, "해봄 가족 · 도움 필요"],
+      ["sos_alerts", true, "해봄 가족 · 긴급"],
+      ["sos_alerts", true, "해봄 가족 · 긴급"],
+    ]);
+  });
+});
+
+describe("push-fn: 승인", () => {
+  const base = {
+    id: "a20261126T060000000Z-abcdef",
+    elderId: "e1",
+    appName: "정부24",
+    action: "guide_gov24_auth",
+  };
+
+  it("보호자 항목이 생기면 그 보호자에게 approval_requests 알림 (앱 이름 없음)", async () => {
+    const d = deps([device("g1", "dev-g1", "tok-g1")], {});
+    await createPushHandler(() => d.value)({
+      Records: [
+        record("INSERT", {
+          ...base,
+          PK: "GUARDIAN#g1",
+          SK: "APPROVAL#x",
+          type: "guardian_approval",
+          guardianId: "g1",
+          status: "pending",
+        }),
+      ],
+    });
+    expect(d.sent).toEqual([
+      {
+        token: "tok-g1",
+        data: { kind: "approval", id: base.id, elderId: "e1" },
+        notification: {
+          title: "해봄 가족 · 승인 요청",
+          body: "가족이 도움을 받아도 될지 물어요. 앱에서 확인해 주세요.",
+          channelId: "approval_requests",
+          urgent: true,
+        },
+      },
+    ]);
+  });
+
+  it("pending 에서 바뀌면 어르신에게 결과, 보호자에게 목록 갱신 data", async () => {
+    const d = deps([device("e1", "dev-e1", "tok-e1"), device("g1", "dev-g1", "tok-g1")], {});
+    const original = {
+      ...base,
+      PK: "APPROVAL#x",
+      SK: "META",
+      type: "approval",
+      guardianIds: ["g1"],
+    };
+    const modify = (oldStatus: string, newStatus: string, extra: object = {}) => {
+      const r = record("MODIFY", { ...original, status: newStatus, ...extra });
+      const old = record("INSERT", { ...original, status: oldStatus });
+      return { ...r, dynamodb: { ...r.dynamodb, OldImage: old.dynamodb?.NewImage } };
+    };
+    await createPushHandler(() => d.value)({
+      Records: [
+        modify("pending", "approved", { respondedBy: "g1", respondedByLabel: "큰딸" }),
+        modify("approved", "approved"),
+      ],
+    });
+    expect(d.sent).toEqual([
+      {
+        token: "tok-e1",
+        data: {
+          kind: "approval",
+          id: base.id,
+          status: "approved",
+          respondedBy: "g1",
+          respondedByLabel: "큰딸",
+        },
+      },
+      {
+        token: "tok-g1",
+        data: { kind: "approval", id: base.id, status: "approved", elderId: "e1" },
+      },
     ]);
   });
 });

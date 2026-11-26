@@ -280,4 +280,38 @@ describe("#21 목록, #22 읽음", () => {
     const list = (await ctx.call("GET", "/v1/guardian/notifications", G1)).body as Items;
     expect(list.items).toEqual([]);
   });
+
+  it("한 건 조회: #21 항목과 같은 모양, 없거나 해제되면 404", async () => {
+    const list = (await ctx.call("GET", "/v1/guardian/notifications", G1)).body as Items;
+    const first = list.items[0];
+    const one = await ctx.call("GET", `/v1/guardian/notifications/${String(first?.id)}`, G1);
+    expect(one).toEqual({ status: 200, body: first });
+    const path = `/v1/guardian/notifications/${String(first?.id)}`;
+    // 연결되지 않은 보호자에게는 없는 알림, 어르신은 부를 수 없음
+    expect((await ctx.call("GET", path, G2)).status).toBe(404);
+    expect((await ctx.call("GET", path, ELDER)).status).toBe(403);
+    // 해제하면 404
+    await ctx.call("DELETE", `/v1/guardian/links/${ELDER}`, G1);
+    expect((await ctx.call("GET", path, G1)).status).toBe(404);
+  });
+
+  it("모두 읽음: 본문 없이 전체, elderId 로 한 어르신만, 이미 읽은 것은 그대로", async () => {
+    const list = (await ctx.call("GET", "/v1/guardian/notifications", G1)).body as Items;
+    await ctx.call("POST", `/v1/guardian/notifications/${String(list.items[0]?.id)}/read`, G1);
+    ctx.advance(60_000);
+
+    const other = await ctx.call("POST", "/v1/guardian/notifications/read-all", G1, {
+      elderId: "someone-else",
+    });
+    expect(other).toEqual({ status: 200, body: { updated: 0 } });
+    const all = await ctx.call("POST", "/v1/guardian/notifications/read-all", G1);
+    expect(all).toEqual({ status: 200, body: { updated: 2 } });
+
+    const after = (await ctx.call("GET", "/v1/guardian/notifications", G1)).body as Items;
+    expect(after.items.map((i) => i.readAt)).toEqual([
+      "2026-11-26T06:00:03.000Z",
+      "2026-11-26T06:01:03.000Z",
+      "2026-11-26T06:01:03.000Z",
+    ]);
+  });
 });

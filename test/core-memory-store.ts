@@ -7,6 +7,7 @@ import {
   type LinkRecord,
   type UserProfile,
 } from "../src/core/model.js";
+import type { ApprovalRecord, ApprovalStore, GuardianApproval } from "../src/core/approvals.js";
 import type {
   InboxItem,
   NotificationRecord,
@@ -173,6 +174,18 @@ export function memoryNotificationStore() {
       item.readAt ??= readAt;
       return Promise.resolve(true);
     },
+    getInbox: (guardianId, id) =>
+      Promise.resolve(structuredClone(inbox.get(`${guardianId}|${id}`))),
+    markAllRead(guardianId, readAt, elderId) {
+      let count = 0;
+      for (const item of inbox.values()) {
+        if (item.guardianId !== guardianId || item.readAt !== undefined) continue;
+        if (elderId !== undefined && item.elderId !== elderId) continue;
+        item.readAt = readAt;
+        count++;
+      }
+      return Promise.resolve(count);
+    },
     deleteInboxForElder(guardianId, elderId) {
       let count = 0;
       for (const [key, item] of inbox) {
@@ -185,4 +198,90 @@ export function memoryNotificationStore() {
     },
   };
   return { store, originals, inbox };
+}
+
+/** ApprovalStore 메모리 구현 (잠금·전이 조건은 DynamoDB 구현과 같게) */
+export function memoryApprovalStore() {
+  const originals = new Map<string, ApprovalRecord>();
+  const items = new Map<string, GuardianApproval>(); // `${gid}|${id}`
+  const locks = new Map<string, { approvalId: string; expiresAt: string }>(); // `${eid}|${action}`
+
+  const store: ApprovalStore = {
+    create(record, entries, now) {
+      const key = `${record.elderId}|${record.action}`;
+      const lock = locks.get(key);
+      if (lock !== undefined && lock.expiresAt > now) return Promise.resolve("locked");
+      locks.set(key, { approvalId: record.id, expiresAt: record.expiresAt });
+      originals.set(record.id, structuredClone(record));
+      for (const e of entries) items.set(`${e.guardianId}|${e.id}`, structuredClone(e));
+      return Promise.resolve("created");
+    },
+    get: (id) => Promise.resolve(structuredClone(originals.get(id))),
+    lockedApprovalId: (eid, action) => Promise.resolve(locks.get(`${eid}|${action}`)?.approvalId),
+    transition(record, to, fields, guard, now) {
+      const current = originals.get(record.id);
+      if (current?.status !== "pending") return Promise.resolve(false);
+      if (guard === "active" && !(current.expiresAt > now)) return Promise.resolve(false);
+      if (guard === "expired" && !(current.expiresAt <= now)) return Promise.resolve(false);
+      Object.assign(current, { status: to }, fields);
+      for (const gid of current.guardianIds) {
+        const item = items.get(`${gid}|${current.id}`);
+        if (item) Object.assign(item, { status: to }, fields);
+      }
+      const key = `${current.elderId}|${current.action}`;
+      if (locks.get(key)?.approvalId === current.id) locks.delete(key);
+      return Promise.resolve(true);
+    },
+    getForGuardian: (gid, id) => Promise.resolve(structuredClone(items.get(`${gid}|${id}`))),
+    listForGuardian(gid, { pendingOnly, now, cursor, since, limit }) {
+      let list = [...items.values()]
+        .filter((i) => i.guardianId === gid)
+        .sort((a, b) => b.id.localeCompare(a.id));
+      if (cursor !== undefined) list = list.filter((i) => i.id < cursor);
+      const page = list.slice(0, limit);
+      const more = list.length > limit;
+      let out = page;
+      if (pendingOnly) out = out.filter((i) => i.status === "pending" && i.expiresAt > now);
+      if (since !== undefined) out = out.filter((i) => i.updatedAt > since);
+      const last = page.at(-1);
+      return Promise.resolve(
+        more && last
+          ? { items: structuredClone(out), nextCursor: last.id }
+          : { items: structuredClone(out) },
+      );
+    },
+    listExpiredPending: (now, limit) =>
+      Promise.resolve(
+        [...originals.values()]
+          .filter((a) => a.status === "pending" && a.expiresAt < now)
+          .slice(0, limit)
+          .map((a) => a.id),
+      ),
+    listPendingForElder: (eid) =>
+      Promise.resolve(
+        structuredClone(
+          [...originals.values()].filter((a) => a.elderId === eid && a.status === "pending"),
+        ),
+      ),
+    removeGuardian(record, gid) {
+      const current = originals.get(record.id);
+      if (current?.status !== "pending" || !current.guardianIds.includes(gid)) {
+        return Promise.resolve(undefined);
+      }
+      current.guardianIds = current.guardianIds.filter((g) => g !== gid);
+      items.delete(`${gid}|${record.id}`);
+      return Promise.resolve([...current.guardianIds]);
+    },
+    deleteForGuardianAndElder(gid, eid) {
+      let n = 0;
+      for (const [key, item] of items) {
+        if (item.guardianId === gid && item.elderId === eid) {
+          items.delete(key);
+          n++;
+        }
+      }
+      return Promise.resolve(n);
+    },
+  };
+  return { store, originals, items, locks };
 }

@@ -15,7 +15,11 @@ export type ErrorReason =
   | "code-expired"
   | "code-used"
   | "already-linked"
-  | "too-many-attempts";
+  | "too-many-attempts"
+  // 승인 응답 #13 (보호자 앱 요청 2.3)
+  | "already-responded"
+  | "approval-expired"
+  | "approval-cancelled";
 
 const STATUS_BY_REASON: Record<ErrorReason, number> = {
   unauthenticated: 401,
@@ -33,6 +37,9 @@ const STATUS_BY_REASON: Record<ErrorReason, number> = {
   "code-used": 409,
   "already-linked": 409,
   "too-many-attempts": 429,
+  "already-responded": 409,
+  "approval-expired": 409,
+  "approval-cancelled": 409,
 };
 
 export class ApiError extends Error {

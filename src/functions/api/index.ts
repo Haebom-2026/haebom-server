@@ -1,3 +1,5 @@
+import { createApprovalRoutes, handleApprovalUnlink } from "../../core/approval-routes.js";
+import { createAwsApprovalStore } from "../../core/approval-store.js";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createNotificationRoutes } from "../../core/notification-routes.js";
 import { createAwsNotificationStore } from "../../core/notification-store.js";
@@ -13,24 +15,23 @@ import { healthz } from "./routes/healthz.js";
 const mainTable = process.env.TABLE_MAIN ?? "haebom-local-main";
 const store = createAwsCoreStore(mainTable);
 const notifications = createAwsNotificationStore(mainTable);
+const approvals = createAwsApprovalStore(mainTable);
+const profiles = createProfileGuard(store);
 const idempotency = createAwsIdempotencyStore(process.env.TABLE_IDEM ?? "haebom-local-idem");
 
-/** api-fn: #1~#15, #18~#24 (S1 사용자·기기·연결, S2 알림) */
+/** api-fn: #1~#15, #18~#24 (S1 사용자·기기·연결, S2 알림, S3 승인) */
 export const router = createRouter([
   { method: "GET", path: "/v1/healthz", handler: healthz },
   ...createCoreRoutes({
     store,
     idempotency,
     onUnlink: async (elderId, guardianId) => {
+      await handleApprovalUnlink(approvals, elderId, guardianId, new Date());
       await notifications.deleteInboxForElder(guardianId, elderId);
     },
   }),
-  ...createNotificationRoutes({
-    store,
-    notifications,
-    idempotency,
-    profiles: createProfileGuard(store),
-  }),
+  ...createNotificationRoutes({ store, notifications, idempotency, profiles }),
+  ...createApprovalRoutes({ store, approvals, idempotency, profiles }),
 ]);
 
 export const handler = createHttpHandler(router, createLogger({ service: "api" }));

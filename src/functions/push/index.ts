@@ -2,6 +2,7 @@ import type { DynamoDBBatchResponse, DynamoDBStreamEvent } from "aws-lambda";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createFcmSender } from "../../push/fcm.js";
 import { linkChangeFromRecord, notifyLinkChange, type PushDeps } from "../../push/link-events.js";
+import { approvalEventFromRecord, notifyApproval } from "../../push/approval-events.js";
 import { inboxEventFromRecord, notifyInbox } from "../../push/notification-events.js";
 import { requireEnv } from "../../shared/config.js";
 import { createLogger } from "../../shared/logger.js";
@@ -28,7 +29,7 @@ function getDeps(): PushDeps {
 
 /**
  * push-fn: haebom-main Streams → FCM.
- * S1: 연결 생성·해제, S2: 보호자 알림함(민감 앱·막힘·SOS). S3 에서 승인을 추가한다.
+ * S1: 연결 생성·해제, S2: 보호자 알림함(민감 앱·막힘·SOS), S3: 승인 요청·결과.
  * 실패한 레코드부터 다시 받도록 첫 실패에서 멈추고 batchItemFailures 로 돌려준다.
  * (Lambda 는 두 번째 인자로 context 를 넘기므로 의존성은 팩토리로 주입한다.)
  */
@@ -40,6 +41,8 @@ export function createPushHandler(resolveDeps: () => PushDeps) {
         if (change !== undefined) await notifyLinkChange(change, resolveDeps());
         const inbox = inboxEventFromRecord(record);
         if (inbox !== undefined) await notifyInbox(inbox, resolveDeps());
+        const approval = approvalEventFromRecord(record);
+        if (approval !== undefined) await notifyApproval(approval, resolveDeps());
       } catch (error) {
         log.error("push failed", { error, eventId: record.eventID });
         const id = record.dynamodb?.SequenceNumber;
