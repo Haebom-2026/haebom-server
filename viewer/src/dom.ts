@@ -1,3 +1,5 @@
+import type { ScreenMatch } from "./types.ts";
+
 /** 아주 작은 DOM 도우미 (프레임워크 없이). */
 
 type Child = Node | string | number | null | undefined | false;
@@ -68,6 +70,32 @@ export function fpHue(fingerprint: string): number {
   let hash = 0;
   for (const ch of fingerprint) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return hash % 360;
+}
+
+const MATCH_LABEL: Record<ScreenMatch["kind"], string> = {
+  exact: "같은 지문",
+  similar: "비슷함",
+  ambiguous: "판단 보류",
+  new: "새 페이지",
+};
+
+/** 화면 매칭 결과 한 줄: "페이지 p1a2b3c4 · 비슷함 0.82 (2등 0.31)" */
+export function matchLine(match: ScreenMatch | undefined): HTMLElement | null {
+  if (!match) return null;
+  return h(
+    "span",
+    { class: `match match-${match.kind}`, title: match.version },
+    match.pageId ? h("span", { class: "mono" }, `페이지 ${match.pageId}`) : "페이지 없음",
+    ` · ${MATCH_LABEL[match.kind]}`,
+    match.kind === "exact" ? "" : ` ${match.score.toFixed(2)}`,
+    match.runnerUp
+      ? h(
+          "span",
+          { class: "muted" },
+          ` (${match.kind === "new" ? "가장 가까운" : "2등"} ${match.runnerUp.pageId} ${match.runnerUp.score.toFixed(2)})`,
+        )
+      : null,
+  );
 }
 
 export function fpChip(fingerprint: string): HTMLElement {

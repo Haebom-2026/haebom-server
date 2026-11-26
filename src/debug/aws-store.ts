@@ -5,6 +5,7 @@
  *   DEV#<deviceId> / META                 기기 정보, 마지막 신호, 중복 판단용 lastKey
  *   DEV#<deviceId> / SCREEN#<screenId>    화면 요약 + s3Key
  *   PIN#<pinId>    / META                 보관 세션
+ *   PAGE#<pkg>     / PAGE#<pageId>        화면 매칭 페이지 (토큰·지문 집합)
  * 버킷
  *   screens/<deviceId>/<screenId>.json    3일 수명 주기
  *   pinned/<deviceId>/<screenId>.json     30일 수명 주기 (보관 시 복사)
@@ -25,16 +26,19 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import type { MatchResult } from "../cache/match.js";
 import { ApiError } from "../shared/errors.js";
 import {
   DEVICE_TTL_SECONDS,
   MAX_PIN_SCREENS,
+  PAGE_TTL_SECONDS,
   PINNED_TTL_SECONDS,
   SCREEN_TTL_SECONDS,
   epochSeconds,
   summaryOf,
   type DebugStore,
   type DeviceRecord,
+  type PageRecord,
   type PinRecord,
   type ScreenDocument,
   type ScreenSummary,
@@ -53,6 +57,14 @@ const devicePk = (deviceId: string) => `DEV#${deviceId}`;
 const screenSk = (screenId: string) => `SCREEN#${screenId}`;
 const screenKey = (deviceId: string, screenId: string) => `screens/${deviceId}/${screenId}.json`;
 const pinnedKey = (deviceId: string, screenId: string) => `pinned/${deviceId}/${screenId}.json`;
+
+const pagePk = (pkg: string) => `PAGE#${pkg}`;
+const pageSk = (pageId: string) => `PAGE#${pageId}`;
+
+const strList = (value: unknown): string[] =>
+  value instanceof Set || Array.isArray(value)
+    ? [...(value as Iterable<unknown>)].filter((v): v is string => typeof v === "string")
+    : [];
 
 const str = (value: unknown): string => (typeof value === "string" ? value : "");
 const num = (value: unknown): number => (typeof value === "number" ? value : 0);
@@ -78,6 +90,8 @@ function toDevice(item: Item): DeviceRecord {
 function toSummary(item: Item): ScreenSummary {
   const appHash = optStr(item.appHash);
   const guideType = optStr(item.guideType);
+  const match =
+    item.match !== null && typeof item.match === "object" ? (item.match as MatchResult) : undefined;
   return {
     screenId: str(item.screenId),
     deviceId: str(item.deviceId),
@@ -91,6 +105,22 @@ function toSummary(item: Item): ScreenSummary {
     pinned: item.pinned === true,
     ...(appHash === undefined ? {} : { appHash }),
     ...(guideType === undefined ? {} : { guideType }),
+    ...(match === undefined ? {} : { match }),
+  };
+}
+
+function toPage(item: Item): PageRecord {
+  return {
+    pkg: str(item.pkg),
+    pageId: str(item.pageId),
+    tokens: strList(item.tokens),
+    lastTokens: strList(item.lastTokens),
+    fingerprints: strList(item.fingerprints).sort(),
+    screenCount: num(item.screenCount),
+    firstSeenAt: str(item.firstSeenAt),
+    lastSeenAt: str(item.lastSeenAt),
+    sampleDeviceId: str(item.sampleDeviceId),
+    sampleScreenId: str(item.sampleScreenId),
   };
 }
 
@@ -365,6 +395,74 @@ export function createAwsDebugStore(options: AwsDebugStoreOptions): DebugStore {
         ExpressionAttributeValues: { ":meta": "META", ":pin": "PIN#" },
       });
       return items.map(toPin).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+
+    async listPages(pkg) {
+      const items: Item[] = [];
+      let startKey: Record<string, unknown> | undefined;
+      do {
+        const page = await doc.send(
+          new QueryCommand({
+            TableName,
+            KeyConditionExpression: "PK = :pk",
+            ExpressionAttributeValues: { ":pk": pagePk(pkg) },
+            ExclusiveStartKey: startKey,
+          }),
+        );
+        items.push(...((page.Items ?? []) as Item[]));
+        startKey = page.LastEvaluatedKey;
+      } while (startKey);
+      return items.map(toPage);
+    },
+
+    async createPage(page) {
+      await doc.send(
+        new PutCommand({
+          TableName,
+          Item: {
+            PK: pagePk(page.pkg),
+            SK: pageSk(page.pageId),
+            ...page,
+            // 문자열 집합(SS): touchPage 에서 ADD 로 중복 없이 더한다
+            fingerprints: new Set(page.fingerprints),
+            ttl: epochSeconds(new Date(page.lastSeenAt)) + PAGE_TTL_SECONDS,
+          },
+          ConditionExpression: "attribute_not_exists(PK)",
+        }),
+      );
+    },
+
+    async touchPage(pkg, pageId, { fingerprint, tokens, at }) {
+      await doc.send(
+        new UpdateCommand({
+          TableName,
+          Key: { PK: pagePk(pkg), SK: pageSk(pageId) },
+          UpdateExpression:
+            "SET lastTokens = :t, lastSeenAt = :at, #ttl = :ttl ADD fingerprints :fp, screenCount :one",
+          ConditionExpression: "attribute_exists(PK)",
+          ExpressionAttributeNames: { "#ttl": "ttl" },
+          ExpressionAttributeValues: {
+            ":t": tokens,
+            ":at": at,
+            ":ttl": epochSeconds(new Date(at)) + PAGE_TTL_SECONDS,
+            ":fp": new Set([fingerprint]),
+            ":one": 1,
+          },
+        }),
+      );
+    },
+
+    async setScreenMatch(deviceId, screenId, match) {
+      await doc.send(
+        new UpdateCommand({
+          TableName,
+          Key: { PK: devicePk(deviceId), SK: screenSk(screenId) },
+          UpdateExpression: "SET #m = :m",
+          ConditionExpression: "attribute_exists(PK)",
+          ExpressionAttributeNames: { "#m": "match" },
+          ExpressionAttributeValues: { ":m": match },
+        }),
+      );
     },
   };
 }

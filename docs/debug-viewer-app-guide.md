@@ -75,8 +75,15 @@ POST /v1/dev/screens
 응답: `202`
 
 ```json
-{ "status": "saved", "screenId": "20261126T073000456Z-1a2b3c", "fingerprint": "82ef3d69b100f485" }
+{
+  "status": "saved",
+  "screenId": "20261126T073000456Z-1a2b3c",
+  "fingerprint": "82ef3d69b100f485",
+  "match": { "version": "match@v1", "kind": "similar", "pageId": "p1a2b3c4d", "score": 0.82 }
+}
 ```
+
+- `match`: 이미 본 어느 페이지인지 서버가 판정한 결과 (시험 기능, [server-plan.md 12.7.1](server-plan.md)). 앱은 쓰지 않아도 된다.
 
 또는 직전 화면과 같아 저장하지 않았을 때:
 

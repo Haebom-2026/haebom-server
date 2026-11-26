@@ -1,3 +1,4 @@
+import type { MatchResult } from "../cache/match.js";
 import type { HeartbeatInput, Screen } from "./schema.js";
 
 /** 보관 기간 (docs/server-plan.md 12.5) */
@@ -7,6 +8,8 @@ export const DEVICE_TTL_SECONDS = 30 * 24 * 3600;
 /** heartbeat 5초 × 3 */
 export const ONLINE_WINDOW_MS = 15_000;
 export const MAX_PIN_SCREENS = 500;
+/** 페이지(화면 매칭 결과 묶음)는 마지막으로 본 뒤 30일 */
+export const PAGE_TTL_SECONDS = 30 * 24 * 3600;
 
 export interface DeviceRecord {
   deviceId: string;
@@ -34,6 +37,22 @@ export interface ScreenSummary {
   pinned: boolean;
   /** guide 요청으로 저장된 화면이면 그 응답 type (목록에서 구분용) */
   guideType?: string;
+  /** 화면 매칭 결과: 이미 본 어느 페이지인지 (src/cache/match.ts) */
+  match?: MatchResult;
+}
+
+/** 페이지: 같은 화면으로 판정된 화면들의 묶음 (앱별) */
+export interface PageRecord {
+  pkg: string;
+  pageId: string;
+  tokens: string[];
+  lastTokens: string[];
+  fingerprints: string[];
+  screenCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  sampleDeviceId: string;
+  sampleScreenId: string;
 }
 
 /** S3 에 저장하는 화면 원본 (마스킹 후). S5 이후 guide 응답이 붙는다. */
@@ -78,6 +97,17 @@ export interface DebugStore {
   getScreen(deviceId: string, screenId: string): Promise<ScreenDocument | undefined>;
   createPin(pin: Omit<PinRecord, "screenCount">): Promise<PinRecord>;
   listPins(): Promise<PinRecord[]>;
+  /** 앱 하나의 페이지 전부 */
+  listPages(pkg: string): Promise<PageRecord[]>;
+  createPage(page: PageRecord): Promise<void>;
+  /** 페이지로 판정된 화면 하나를 더한다: 지문 추가, 최근 토큰·시각 갱신, 횟수 +1 */
+  touchPage(
+    pkg: string,
+    pageId: string,
+    update: { fingerprint: string; tokens: string[]; at: string },
+  ): Promise<void>;
+  /** 이미 저장된 화면의 매칭 결과만 바꾼다 (다시 매칭할 때) */
+  setScreenMatch(deviceId: string, screenId: string, match: MatchResult): Promise<void>;
 }
 
 /** 원본 문서에서 요약 필드만 꺼낸다 (테이블 항목·목록 응답용). */
@@ -95,6 +125,7 @@ export function summaryOf(doc: ScreenDocument): ScreenSummary {
     maskedCount: doc.maskedCount,
     pinned: doc.pinned,
     ...(doc.guideType === undefined ? {} : { guideType: doc.guideType }),
+    ...(doc.match === undefined ? {} : { match: doc.match }),
   };
 }
 

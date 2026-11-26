@@ -5,9 +5,14 @@
  */
 import type { ScreenDocument, ScreenNode } from "./types.ts";
 
-export type RuleId = "v1" | "nopos" | "act";
+export type RuleId = "page" | "v1" | "nopos" | "act";
 
 export const RULES: { id: RuleId; label: string; hint: string }[] = [
+  {
+    id: "page",
+    label: "페이지 매칭 (서버)",
+    hint: "서버가 판정한 페이지(match@v1): 같은 지문 → 비슷한 페이지(글자 겹침 ≥ 0.5, 2등과 0.15 차이) → 새 페이지",
+  },
   { id: "v1", label: "fp@v1 (지금)", hint: "클래스 | 글자 | 위치칸(10등분) — 서버 지문" },
   { id: "nopos", label: "위치 빼기", hint: "클래스 | 글자 — 스크롤·밀림에 안 갈림" },
   {
@@ -27,7 +32,7 @@ export const isActionable = (node: ScreenNode): boolean =>
   node.scrollable === true ||
   node.checkable === true;
 
-function tokens(doc: ScreenDocument, rule: Exclude<RuleId, "v1">): string[] {
+function tokens(doc: ScreenDocument, rule: "nopos" | "act"): string[] {
   const out = new Set<string>();
   for (const node of doc.screen.nodes) {
     if (rule === "act" && !isActionable(node)) continue;
@@ -42,5 +47,10 @@ function tokens(doc: ScreenDocument, rule: Exclude<RuleId, "v1">): string[] {
 /** 같은 값이면 같은 화면으로 묶는다 (pkg 포함) */
 export function ruleKey(doc: ScreenDocument, rule: RuleId): string {
   if (rule === "v1") return `${doc.pkg}#${doc.fingerprint}`;
+  if (rule === "page") {
+    // 매칭 결과가 없는 화면(기능 이전에 저장 등)은 혼자인 점
+    const pageId = doc.match?.pageId;
+    return pageId ? `${doc.pkg}#page:${pageId}` : `${doc.pkg}#screen:${doc.screenId}`;
+  }
   return `${doc.pkg}#${tokens(doc, rule).join("\n")}`;
 }

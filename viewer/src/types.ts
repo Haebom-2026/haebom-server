@@ -27,6 +27,17 @@ export interface ScreenSummary {
   pinned: boolean;
   /** guide 요청으로 저장된 화면이면 응답 type */
   guideType?: string;
+  /** 화면 매칭: 이미 본 어느 페이지인지 (src/cache/match.ts) */
+  match?: ScreenMatch;
+}
+
+export interface ScreenMatch {
+  version: string;
+  /** exact 같은 지문 · similar 비슷함 · ambiguous 판단 보류 · new 새 페이지 */
+  kind: "exact" | "similar" | "ambiguous" | "new";
+  pageId?: string;
+  score: number;
+  runnerUp?: { pageId: string; score: number };
 }
 
 /** 노드 필드는 임시 (i, t, d, c, b 외에 앱이 보내는 것은 그대로 보여 준다). */

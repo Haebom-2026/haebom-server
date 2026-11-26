@@ -784,3 +784,14 @@ svg.wire rect.act {
   max-width: 300px;
   margin: 0 auto;
 }
+svg.map circle.ambiguous {
+  stroke-dasharray: 2 2;
+  stroke-width: 2;
+  fill: var(--panel);
+}
+.match-new {
+  color: var(--ok);
+}
+.match-ambiguous {
+  color: var(--warn);
+}
