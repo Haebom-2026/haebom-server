@@ -784,14 +784,58 @@ svg.wire rect.act {
   max-width: 300px;
   margin: 0 auto;
 }
+/* 판단 보류: 속은 원래대로(찬 점·빈 점 구분 유지), 테두리만 경고색 점선 */
 svg.map circle.ambiguous {
-  stroke-dasharray: 2 2;
+  stroke: var(--warn);
+  stroke-dasharray: 3 2;
   stroke-width: 2;
-  fill: var(--panel);
 }
 .match-new {
   color: var(--ok);
 }
 .match-ambiguous {
   color: var(--warn);
+}
+svg.map text.count {
+  fill: var(--panel);
+  stroke: none;
+  font-size: 10px;
+  font-weight: 700;
+}
+.group-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.group-list li + li {
+  border-top: 1px solid var(--line);
+}
+.group-list button {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 6px 4px;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.group-list button:hover {
+  background: var(--line);
+}
+.group-list svg.wire {
+  width: 34px;
+  flex: none;
+}
+.group-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ellipsis {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

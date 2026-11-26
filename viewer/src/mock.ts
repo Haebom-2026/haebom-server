@@ -163,7 +163,16 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
     ? { version: "match@v1", kind: "new", pageId, score: 0 }
     : seen.has(fp)
       ? { version: "match@v1", kind: "exact", pageId, score: 1 }
-      : { version: "match@v1", kind: "similar", pageId, score: 0.71 };
+      : pkg.includes("youtube") && seen.size === 2
+        ? // dev 처럼 유튜브에서 가끔 판단 보류 (묶음 중간에 섞이게)
+          {
+            version: "match@v1",
+            kind: "ambiguous",
+            pageId,
+            score: 0.67,
+            runnerUp: { pageId: "p9999999", score: 0.64 },
+          }
+        : { version: "match@v1", kind: "similar", pageId, score: 0.71 };
   seenFps.set(pageId, (seen ?? new Set()).add(fp));
   screens.push({
     screenId: screenIdAt(at),

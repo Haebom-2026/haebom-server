@@ -3,6 +3,7 @@
  * 점에 마우스를 올리면 어떤 화면인지 미리 보기, 누르면 오른쪽에 화면 전체.
  * 앱(pkg)마다 색이 다르고, 혼자인 점(같은 화면이 하나뿐)은 속이 빈 원.
  * 규칙을 바꾸면 묶음이 다시 계산된다 → 지문이 얼마나 갈리는지 한눈에 본다.
+ * "묶어 보기"(기본)에서는 같은 화면 묶음 하나 = 점 하나(크기 ∝ 화면 수), 누르면 묶음 안 화면 목록.
  */
 import {
   forceCollide,
@@ -32,10 +33,19 @@ const docCache = new Map<string, ScreenDocument>();
 
 interface Dot extends SimulationNodeDatum {
   id: string;
+  /** 낱개: 그 화면, 묶음: 가장 최근 화면 */
   doc: ScreenDocument;
   key: string;
+  /** 같은 키의 점들 (묶어 보기에서는 자기 하나) */
   group: Dot[];
+  /** 같은 키의 화면들, 오래된 순 */
+  members: ScreenDocument[];
+  r: number;
 }
+type Mode = "group" | "single";
+
+/** 묶음 점 반지름: 화면 수의 제곱근에 비례, 너무 커지지 않게 */
+const radiusOf = (n: number) => Math.min(26, R + 2.2 * Math.sqrt(n - 1));
 type Link = SimulationLinkDatum<Dot> & { source: Dot; target: Dot };
 
 const labelOf = (doc: ScreenDocument): string[] =>
@@ -67,6 +77,7 @@ function wire(doc: ScreenDocument, width: number): SVGSVGElement {
 
 export function mapView(root: HTMLElement): () => void {
   let rule: RuleId = "page";
+  let mode: Mode = "group";
   let deviceFilter = "";
   let devices: Device[] = [];
   let summaries: ScreenSummary[] = [];
@@ -77,7 +88,7 @@ export function mapView(root: HTMLElement): () => void {
   let disposed = false;
   let loading = false;
   let loaded = false;
-  let lastGroups = new Map<string, Dot[]>();
+  let lastGroups = new Map<string, ScreenDocument[]>();
   let lastPkgs: string[] = [];
   let view = { x: 0, y: 0, w: 800, h: 600 };
 
@@ -103,6 +114,32 @@ export function mapView(root: HTMLElement): () => void {
       ),
     ),
   );
+  const modeSeg = h(
+    "div",
+    { class: "seg", role: "group", "aria-label": "보기" },
+    (
+      [
+        ["group", "묶어 보기", "같은 화면 묶음 하나를 점 하나로 (크기 = 화면 수)"],
+        ["single", "낱개", "화면 한 번 = 점 하나, 같은 화면끼리 선으로"],
+      ] as const
+    ).map(([id, label, hint]) =>
+      h(
+        "button",
+        {
+          class: id === mode ? "on" : "",
+          title: hint,
+          onclick: (e: MouseEvent) => {
+            mode = id;
+            for (const b of modeSeg.querySelectorAll("button"))
+              b.classList.toggle("on", b === e.currentTarget);
+            selected = undefined;
+            rebuild(true);
+          },
+        },
+        label,
+      ),
+    ),
+  );
   const deviceSelect = h("select", {
     onchange: (e: Event) => {
       deviceFilter = (e.target as HTMLSelectElement).value;
@@ -112,8 +149,9 @@ export function mapView(root: HTMLElement): () => void {
 
   const linkLayer = s("g", { class: "links" });
   const dotLayer = s("g", { class: "dots" });
+  const countLayer = s("g", { class: "counts" });
   const labelLayer = s("g", { class: "labels" });
-  const svg = s("svg", { class: "map" }, linkLayer, dotLayer, labelLayer);
+  const svg = s("svg", { class: "map" }, linkLayer, dotLayer, countLayer, labelLayer);
   const tip = h("div", { class: "map-tip", hidden: true });
   const canvas = h("div", { class: "map-canvas" }, svg, tip);
   const panel = h("div", { class: "screen-panel map-panel" });
@@ -128,13 +166,14 @@ export function mapView(root: HTMLElement): () => void {
         { class: "toolbar map-toolbar" },
         h("span", { class: "muted small" }, "같은 화면 규칙"),
         ruleSeg,
+        modeSeg,
         deviceSelect,
         stats,
       ),
       h(
         "p",
         { class: "muted small hint" },
-        "점 하나 = 화면 한 번. 같은 화면끼리 선으로 이어요. 속이 빈 점은 같은 화면이 하나뿐인 것(갈렸을 수 있음), 점선 테두리는 서버가 판단을 보류한 화면. 휠로 확대, 끌어서 이동.",
+        "묶어 보기: 점 하나 = 같은 화면 묶음, 크기와 숫자 = 화면 수, 누르면 안의 화면 목록. 낱개: 점 하나 = 화면 한 번, 같은 화면끼리 선. 속이 빈 점은 같은 화면이 하나뿐인 것(갈렸을 수 있음), 점선 테두리는 서버가 판단을 보류한 화면이 들어 있는 것. 휠로 확대, 끌어서 이동.",
       ),
       h("div", { class: "map-split" }, canvas, panel),
     ),
@@ -219,24 +258,49 @@ export function mapView(root: HTMLElement): () => void {
       .filter((d): d is ScreenDocument => d !== undefined)
       .sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
 
-    const next = new Map<string, Dot>();
-    const groups = new Map<string, Dot[]>();
+    const groups = new Map<string, ScreenDocument[]>();
     for (const doc of docs) {
-      const old = dots.get(doc.screenId);
-      const dot: Dot = fit
-        ? { id: doc.screenId, doc, key: "", group: [] }
-        : (old ?? { id: doc.screenId, doc, key: "", group: [] });
-      dot.key = ruleKey(doc, rule);
-      const group = groups.get(dot.key) ?? [];
-      group.push(dot);
-      groups.set(dot.key, group);
-      dot.group = group;
-      next.set(dot.id, dot);
+      const key = ruleKey(doc, rule);
+      const members = groups.get(key) ?? [];
+      members.push(doc);
+      groups.set(key, members);
+    }
+
+    const next = new Map<string, Dot>();
+    const reuse = (id: string, doc: ScreenDocument): Dot => {
+      const fresh: Dot = { id, doc, key: "", group: [], members: [], r: R };
+      return fit ? fresh : (dots.get(id) ?? fresh);
+    };
+    for (const [key, members] of groups) {
+      if (mode === "group") {
+        const latest = members[members.length - 1];
+        if (!latest) continue;
+        const dot = reuse(`g:${key}`, latest);
+        Object.assign(dot, {
+          doc: latest,
+          key,
+          members,
+          group: [dot],
+          r: radiusOf(members.length),
+        });
+        next.set(dot.id, dot);
+      } else {
+        const group: Dot[] = [];
+        for (const doc of members) {
+          const dot = reuse(doc.screenId, doc);
+          Object.assign(dot, { doc, key, members, group, r: R });
+          group.push(dot);
+          next.set(dot.id, dot);
+        }
+      }
     }
     dots = next;
-    links = [...groups.values()].flatMap((g) =>
-      g.slice(1).map((dot, i) => ({ source: g[i] ?? dot, target: dot })),
-    );
+    links =
+      mode === "group"
+        ? []
+        : [...dots.values()]
+            .filter((d) => d.group[0] !== d)
+            .map((dot) => ({ source: dot.group[dot.group.indexOf(dot) - 1] ?? dot, target: dot }));
 
     // 앱마다 자리: 화면이 많은 앱부터 해바라기 나선으로
     const pkgCount = new Map<string, number>();
@@ -260,7 +324,10 @@ export function mapView(root: HTMLElement): () => void {
     sim = forceSimulation<Dot, Link>([...dots.values()])
       .force("link", forceLink<Dot, Link>(links).distance(10).strength(0.9))
       .force("charge", forceManyBody<Dot>().strength(-14).distanceMax(160))
-      .force("collide", forceCollide<Dot>(R + 1.5))
+      .force(
+        "collide",
+        forceCollide<Dot>((d) => d.r + 1.5),
+      )
       .force("x", forceX<Dot>((d) => anchor.get(d.doc.pkg)?.x ?? 0).strength(0.07))
       .force("y", forceY<Dot>((d) => anchor.get(d.doc.pkg)?.y ?? 0).strength(0.07))
       .stop();
@@ -277,6 +344,10 @@ export function mapView(root: HTMLElement): () => void {
     if (selected) selected = dots.get(selected.id);
     if (!selected) renderOverview(groups, pkgs);
   }
+
+  /** 묶어 보기: 묶음 안 판단 보류 화면 수, 낱개: 그 화면이 판단 보류면 1 */
+  const ambiguousCount = (d: Dot) =>
+    (mode === "group" ? d.members : [d.doc]).filter((m) => m.match?.kind === "ambiguous").length;
 
   function draw(pkgs: string[]) {
     linkLayer.replaceChildren(
@@ -296,11 +367,11 @@ export function mapView(root: HTMLElement): () => void {
         s("circle", {
           cx: d.x ?? 0,
           cy: d.y ?? 0,
-          r: R,
+          r: d.r,
           class: [
-            d.group.length === 1 ? "alone" : "",
+            d.members.length === 1 ? "alone" : "",
             d.doc.guideType ? "guide" : "",
-            rule === "page" && d.doc.match?.kind === "ambiguous" ? "ambiguous" : "",
+            rule === "page" && ambiguousCount(d) > 0 ? "ambiguous" : "",
             selected?.id === d.id ? "selected" : "",
           ].join(" "),
           style: `--h:${fpHue(d.doc.pkg)}`,
@@ -308,12 +379,31 @@ export function mapView(root: HTMLElement): () => void {
         }),
       ),
     );
+    // 묶음 점 안의 화면 수
+    countLayer.replaceChildren(
+      ...[...dots.values()]
+        .filter((d) => mode === "group" && d.members.length > 1)
+        .map((d) => {
+          // 작은 점에도 들어가도록 글자 크기를 반지름에 맞춘다
+          const size = Math.min(10, d.r * (d.members.length >= 10 ? 0.95 : 1.25));
+          return s(
+            "text",
+            {
+              x: d.x ?? 0,
+              y: (d.y ?? 0) + size * 0.35,
+              class: "count",
+              style: `font-size:${size}px`,
+            },
+            d.members.length,
+          );
+        }),
+    );
     // 앱 이름: 그 앱 점들의 위쪽
     labelLayer.replaceChildren(
       ...pkgs.map((p) => {
         const mine = [...dots.values()].filter((d) => d.doc.pkg === p);
         const cx = mine.reduce((a, d) => a + (d.x ?? 0), 0) / mine.length;
-        const top = Math.min(...mine.map((d) => d.y ?? 0));
+        const top = Math.min(...mine.map((d) => (d.y ?? 0) - d.r));
         return s(
           "text",
           { x: cx, y: top - 12, style: `--h:${fpHue(p)}` },
@@ -323,10 +413,11 @@ export function mapView(root: HTMLElement): () => void {
     );
   }
 
-  function renderStats(groups: Map<string, Dot[]>, pkgs: string[]) {
+  function renderStats(groups: Map<string, ScreenDocument[]>, pkgs: string[]) {
     const alone = [...groups.values()].filter((g) => g.length === 1).length;
+    const screens = [...groups.values()].reduce((a, g) => a + g.length, 0);
     stats.replaceChildren(
-      h("span", {}, "화면 ", h("b", {}, dots.size)),
+      h("span", {}, "화면 ", h("b", {}, screens)),
       h("span", {}, "같은 화면 묶음 ", h("b", {}, groups.size)),
       h("span", {}, "혼자인 점 ", h("b", {}, alone)),
       h("span", {}, "앱 ", h("b", {}, pkgs.length)),
@@ -334,9 +425,9 @@ export function mapView(root: HTMLElement): () => void {
   }
 
   /** 아무 점도 고르지 않았을 때 오른쪽: 앱별 화면·묶음 수 */
-  function renderOverview(groups: Map<string, Dot[]>, pkgs: string[]) {
+  function renderOverview(groups: Map<string, ScreenDocument[]>, pkgs: string[]) {
     const byPkg = pkgs.map((p) => {
-      const gs = [...groups.values()].filter((g) => g[0]?.doc.pkg === p);
+      const gs = [...groups.values()].filter((g) => g[0]?.pkg === p);
       return {
         pkg: p,
         screens: gs.reduce((a, g) => a + g.length, 0),
@@ -346,7 +437,13 @@ export function mapView(root: HTMLElement): () => void {
     });
     panel.replaceChildren(
       h("h2", { class: "small-title" }, "앱별"),
-      h("p", { class: "muted small" }, "점을 누르면 그 화면을 여기서 크게 봐요."),
+      h(
+        "p",
+        { class: "muted small" },
+        mode === "group"
+          ? "점을 누르면 그 묶음의 화면 목록을 여기서 봐요."
+          : "점을 누르면 그 화면을 여기서 크게 봐요.",
+      ),
       h(
         "table",
         { class: "pkg-table" },
@@ -430,17 +527,22 @@ export function mapView(root: HTMLElement): () => void {
       h(
         "div",
         { class: "muted small" },
-        `${deviceName(doc.deviceId)} · ${time(doc.capturedAt)} · 노드 ${doc.screen.nodes.length}개`,
+        mode === "group" && dot.members.length > 1
+          ? groupSpan(dot.members)
+          : `${deviceName(doc.deviceId)} · ${time(doc.capturedAt)} · 노드 ${doc.screen.nodes.length}개`,
       ),
       h(
         "div",
         { class: "small" },
-        dot.group.length > 1
-          ? `같은 화면 ${dot.group.length}번 (이 규칙)`
+        dot.members.length > 1
+          ? `같은 화면 ${dot.members.length}번 (이 규칙)${mode === "group" ? " · 미리 보기는 가장 최근" : ""}`
           : "같은 화면이 이것 하나뿐",
         doc.guideType ? h("span", { class: "tag" }, `guide ${doc.guideType}`) : null,
       ),
       ...(doc.match ? [h("div", { class: "small" }, matchLine(doc.match))] : []),
+      ...(mode === "group" && rule === "page" && ambiguousCount(dot) > 0
+        ? [h("div", { class: "small match-ambiguous" }, `판단 보류 ${ambiguousCount(dot)}개 포함`)]
+        : []),
       h(
         "div",
         { class: "tip-body" },
@@ -460,10 +562,121 @@ export function mapView(root: HTMLElement): () => void {
     tip.style.top = `${Math.min(y + 14, box.height - tip.offsetHeight - 8)}px`;
   }
 
+  const groupSpan = (members: ScreenDocument[]) => {
+    const devs = new Set(members.map((m) => m.deviceId)).size;
+    const first = members[0];
+    const last = members[members.length - 1];
+    return `기기 ${devs}대 · ${first ? time(first.capturedAt) : ""} ~ ${last ? time(last.capturedAt) : ""}`;
+  };
+
+  const closeButton = () =>
+    h(
+      "button",
+      {
+        class: "link small",
+        onclick: () => {
+          selected = undefined;
+          for (const el of dotLayer.querySelectorAll("circle")) el.classList.remove("selected");
+          renderOverview(lastGroups, lastPkgs);
+        },
+      },
+      "닫기",
+    );
+
+  /** 묶음 점을 눌렀을 때: 안의 화면 목록 (최근 순). 항목을 누르면 그 화면 */
+  function renderGroupList(dot: Dot) {
+    const { members } = dot;
+    const kinds = new Map<string, number>();
+    for (const m of members) {
+      const k = m.match?.kind ?? "없음";
+      kinds.set(k, (kinds.get(k) ?? 0) + 1);
+    }
+    panel.replaceChildren(
+      h(
+        "div",
+        { class: "map-panel-head" },
+        h(
+          "div",
+          {},
+          h("span", { class: "swatch", style: `--h:${fpHue(dot.doc.pkg)}` }),
+          h("b", {}, `화면 ${members.length}개`),
+          h("span", { class: "muted small" }, ` · ${dot.doc.pkg}`),
+        ),
+        closeButton(),
+      ),
+      h("div", { class: "muted small" }, groupSpan(members)),
+      ...(rule === "page"
+        ? [
+            h(
+              "div",
+              { class: "muted small" },
+              "서버 판정: ",
+              [...kinds].map(([k, n]) => `${k} ${n}`).join(" · "),
+            ),
+          ]
+        : []),
+      h(
+        "ul",
+        { class: "group-list" },
+        [...members].reverse().map((doc, i) =>
+          h(
+            "li",
+            {},
+            h(
+              "button",
+              {
+                onclick: () => {
+                  const idx = members.length - 1 - i;
+                  panel.replaceChildren(
+                    h(
+                      "div",
+                      { class: "map-panel-head" },
+                      h(
+                        "button",
+                        { class: "link small", onclick: () => renderGroupList(dot) },
+                        `← 목록 (${members.length})`,
+                      ),
+                      h(
+                        "a",
+                        { href: `#/d/${encodeURIComponent(doc.deviceId)}` },
+                        deviceName(doc.deviceId),
+                        " 기록 보기 →",
+                      ),
+                    ),
+                    renderScreen(doc, { sameBefore: members[idx - 1], seenCount: idx + 1 }),
+                  );
+                },
+              },
+              wire(doc, 34),
+              h(
+                "span",
+                { class: "group-item" },
+                h(
+                  "span",
+                  { class: "small" },
+                  `${time(doc.capturedAt)} · ${deviceName(doc.deviceId)}`,
+                  doc.guideType ? h("span", { class: "tag" }, `guide ${doc.guideType}`) : null,
+                  doc.match && rule === "page"
+                    ? h("span", { class: `match-${doc.match.kind} small` }, ` ${doc.match.kind}`)
+                    : null,
+                ),
+                h("span", { class: "muted small ellipsis" }, labelOf(doc).slice(0, 2).join(" · ")),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   function select(dot: Dot) {
     selected = dot;
     for (const el of dotLayer.querySelectorAll<SVGCircleElement>("circle")) {
       el.classList.toggle("selected", el.dataset.id === dot.id);
+    }
+    if (mode === "group") {
+      renderGroupList(dot);
+      return;
     }
     const older = dot.group.filter((d) => d.doc.screenId < dot.doc.screenId);
     panel.replaceChildren(
@@ -476,18 +689,7 @@ export function mapView(root: HTMLElement): () => void {
           deviceName(dot.doc.deviceId),
           " 기록 보기 →",
         ),
-        h(
-          "button",
-          {
-            class: "link small",
-            onclick: () => {
-              selected = undefined;
-              for (const el of dotLayer.querySelectorAll("circle")) el.classList.remove("selected");
-              renderOverview(lastGroups, lastPkgs);
-            },
-          },
-          "닫기",
-        ),
+        closeButton(),
       ),
       renderScreen(dot.doc, {
         sameBefore: older[older.length - 1]?.doc,
