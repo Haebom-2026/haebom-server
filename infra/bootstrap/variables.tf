@@ -26,3 +26,9 @@ variable "github_deploy_environments" {
     error_message = "github_deploy_environments 는 environments 안의 값이어야 합니다."
   }
 }
+
+variable "create_github_oidc_provider" {
+  description = "GitHub OIDC provider 를 새로 만들지 여부. 계정에 이미 있으면 false (기존 것을 참조)."
+  type        = bool
+  default     = true
+}

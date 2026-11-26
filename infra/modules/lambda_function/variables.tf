@@ -39,9 +39,8 @@ variable "environment" {
 }
 
 variable "policy_json" {
-  description = "실행 역할에 붙일 인라인 정책 (로그 권한은 모듈이 따로 붙인다)"
+  description = "실행 역할에 붙일 인라인 정책 (로그 권한은 모듈이 따로 붙인다). 필수."
   type        = string
-  default     = null
 }
 
 variable "permissions_boundary_arn" {

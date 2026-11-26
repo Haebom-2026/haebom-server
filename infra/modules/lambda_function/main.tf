@@ -32,9 +32,8 @@ resource "aws_iam_role_policy" "logs" {
   policy = data.aws_iam_policy_document.logs.json
 }
 
+# 정책 내용은 apply 때 정해지는 ARN 을 담으므로 count 로 조건부 생성하면 plan 이 실패한다 → 항상 생성.
 resource "aws_iam_role_policy" "custom" {
-  count = var.policy_json == null ? 0 : 1
-
   name   = "app"
   role   = aws_iam_role.this.id
   policy = var.policy_json
