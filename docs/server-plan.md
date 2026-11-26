@@ -253,7 +253,7 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 
 ### 5.2 #17 classify
 
-> jev(고르기 전용 모델)로 앱·목표를 먼저 고르는 구조를 기획 중: [jev 라우팅 기획](jev-routing-plan.md). S4는 그 구조로 만든다 (jev 성공 → 카탈로그 민감도, 실패 → 아래 LLM 분류).
+> jev(고르기 전용 모델)로 앱·목표를 먼저 고르는 구조를 기획 중: [jev 라우팅 + 스스로 자라는 지도 기획](jev-routing-plan.md). S4는 그 구조로 만든다: 아래 LLM 안전 분류는 jev와 상관없이 늘 돌고, jev가 고른 지도 목표의 민감도는 올리는 데만 쓴다 (그 문서 5.1).
 
 ```
 요청 { commandId, utterance, ruleLevel, ruleApp, signals[] }
@@ -345,7 +345,7 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 ## 9. 캐싱 계층 (자리만 잡음 — 설계는 별도 문서)
 
 > 사용자 설계 문서를 받으면 이 장을 교체한다. 아래는 서버 구조상 **끼워 넣을 지점과 확인할 질문**만 정리한 것.
-> 캐시 키를 (앱, 목표, 페이지)로 모으는 jev 라우팅 제안: [jev 라우팅 기획](jev-routing-plan.md) 6장.
+> 캐시 대신 Opus가 검증한 길로 Claude 없이 안내하는 "지도 안내" 제안: [jev 라우팅 + 스스로 자라는 지도 기획](jev-routing-plan.md) 5.3·8장. 이 장과의 관계는 그 문서 12장 10번.
 
 **끼우는 지점**: `ai-fn` 안, 5.2·5.3 처리 순서의 "캐시 조회" 단계 (민감 정보 필터 **이후**, LLM 호출 **이전**), 그리고 LLM 응답의 후처리 **이후** 저장.
 
@@ -377,7 +377,7 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 | S1 ✅   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
 | S2 ✅   | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency. 계약: [docs/api/s2-notifications.md](api/s2-notifications.md)                                | 시연 SOS·정부24 L1 |
 | S3 ✅   | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn. 계약: [docs/api/s3-approvals.md](api/s3-approvals.md)                                        | 시연 정부24 L2     |
-| S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트). jev 앱·목표 라우팅 포함: [기획](jev-routing-plan.md)                                                 | 시연 사기 의심 L3  |
+| S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트). jev 앱·목표 라우팅 포함: [기획](jev-routing-plan.md) R2                                              | 시연 사기 의심 L3  |
 | S5 ✅   | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |
 | S6      | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
 | S7      | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
