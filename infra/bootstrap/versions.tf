@@ -15,6 +15,9 @@ terraform {
 provider "aws" {
   region = var.region
 
+  # haebom 은 이 계정에만 배포한다. 다른 계정 자격 증명이면 Terraform 이 거부한다.
+  allowed_account_ids = ["045861054142"]
+
   default_tags {
     tags = {
       Project   = "haebom"
