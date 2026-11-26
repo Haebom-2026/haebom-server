@@ -9,10 +9,12 @@ import {
   type GuideModelResult,
 } from "../src/ai/guide.js";
 import { guideRequestSchema, type GuideModelOutput } from "../src/ai/guide-schema.js";
+import { createProfileGuard } from "../src/core/profile.js";
 import { createGuideRoute } from "../src/functions/ai/routes/guide.js";
 import { createHttpHandler } from "../src/shared/handler.js";
 import { createLogger } from "../src/shared/logger.js";
 import { createRouter } from "../src/shared/router.js";
+import { memoryCoreStore } from "./core-memory-store.js";
 import { httpEvent, lambdaContext, parseBody } from "./helpers.js";
 
 const log = createLogger({}, { write: () => undefined });
@@ -43,6 +45,7 @@ const output = (patch: Partial<GuideModelOutput>): GuideModelOutput => ({
   target: 12,
   chips: null,
   dir: null,
+  seek: null,
   ...patch,
 });
 
@@ -62,6 +65,24 @@ describe("toPromptInput", () => {
     });
   });
 
+  it("true 인 상태만 state 로 넘긴다", () => {
+    const req = request();
+    req.screen.nodes.push({
+      i: 20,
+      c: "android.widget.EditText",
+      editable: true,
+      clickable: true,
+      checked: false,
+    });
+    const { input } = toPromptInput(req);
+    expect(input.screen.nodes.at(-1)).toEqual({
+      i: 20,
+      c: "EditText",
+      state: ["clickable", "editable"],
+    });
+    expect(input.screen.nodes[0]).not.toHaveProperty("state");
+  });
+
   it("숫자 개인정보를 가린다", () => {
     const { input, masked } = toPromptInput(
       request({ utterance: "엄마한테 010-1234-5678 로 50,000원 보내 줘" }),
@@ -73,7 +94,10 @@ describe("toPromptInput", () => {
 });
 
 describe("finalize", () => {
-  const ids = new Set([12, 13]);
+  const ids = new Map([
+    [12, "카카오톡"],
+    [13, "유튜브"],
+  ]);
 
   it("화면에 있는 target 이면 그대로", () => {
     expect(finalize(1, output({}), ids)).toEqual({
@@ -81,6 +105,7 @@ describe("finalize", () => {
       type: "highlight",
       say: "화면 왼쪽 가운데의 카카오톡을 누르세요.",
       target: 12,
+      targetText: "카카오톡",
     });
   });
 
@@ -103,10 +128,27 @@ describe("finalize", () => {
 
   it("swipe 는 dir 이 있어야 한다", () => {
     expect(finalize(1, output({ type: "swipe", target: null, dir: null }), ids).type).toBe("say");
-    expect(finalize(1, output({ type: "swipe", target: null, dir: "down" }), ids)).toMatchObject({
+    expect(finalize(1, output({ type: "swipe", target: null, dir: "down" }), ids)).toEqual({
+      requestId: 1,
       type: "swipe",
+      say: "화면 왼쪽 가운데의 카카오톡을 누르세요.",
       dir: "down",
     });
+    expect(
+      finalize(1, output({ type: "swipe", target: null, dir: "up", seek: "디스플레이" }), ids),
+    ).toMatchObject({ type: "swipe", dir: "up", seekText: "디스플레이" });
+  });
+
+  it("targetText 는 가린 글자로, 글자가 없는 요소면 빼고 보낸다", () => {
+    const nodes = new Map([
+      [1, "010-1234-5678 에게 전화"],
+      [2, ""],
+    ]);
+    expect(finalize(1, output({ target: 1 }), nodes)).toMatchObject({
+      target: 1,
+      targetText: "*** 에게 전화",
+    });
+    expect(finalize(1, output({ target: 2 }), nodes)).not.toHaveProperty("targetText");
   });
 
   it("say 는 60자로 자르고 쓰지 않는 필드는 빼고 보낸다", () => {
@@ -125,18 +167,41 @@ describe("guide", () => {
     });
   });
 
-  it("은행 목표와 비밀번호 화면은 모델을 부르지 않는다", async () => {
+  it("비밀번호 화면은 모델을 부르지 않는다", async () => {
     const model = vi.fn<GuideModel>();
-    await expect(guide(request({ goal: "BANK" }), model, log)).resolves.toMatchObject({
-      type: "say",
-      say: FALLBACK_SAY.bank,
-    });
-
     const secret = request();
     secret.screen.nodes.push({ i: 14, t: "비밀번호 6자리를 입력하세요" });
     expect(isSecretScreen(secret)).toBe(true);
     await expect(guide(secret, model, log)).resolves.toMatchObject({ say: FALLBACK_SAY.secret });
+
+    for (const text of ["암호를 입력하세요", "PIN 입력", "주민등록번호 뒷자리"]) {
+      const screen = request();
+      screen.screen.nodes.push({ i: 15, t: text });
+      expect(isSecretScreen(screen)).toBe(true);
+    }
     expect(model).not.toHaveBeenCalled();
+  });
+
+  it("은행 앱 화면도 안내한다 (잔액·계좌번호는 가려서 보낸다)", async () => {
+    const model = vi.fn<GuideModel>(okModel({ target: 1, say: "화면 위쪽의 '조회'를 누르세요." }));
+    const bank = request({
+      goal: "BANK",
+      utterance: "잔액 보여 줘",
+      screen: {
+        pkg: "com.kbstar.kbbank",
+        width: 100,
+        height: 100,
+        nodes: [
+          { i: 0, t: "입출금 110-123-456789" },
+          { i: 1, t: "조회", clickable: true },
+          { i: 2, t: "잔액 1,234,567" },
+        ],
+      },
+    });
+    await expect(guide(bank, model, log)).resolves.toMatchObject({ type: "highlight", target: 1 });
+    const sent = JSON.stringify(model.mock.calls[0]?.[0]);
+    expect(sent).not.toContain("456789");
+    expect(sent).not.toContain("1,234,567");
   });
 
   it("거절·오류는 say 로 답한다", async () => {
@@ -156,9 +221,23 @@ describe("guide", () => {
 });
 
 describe("POST /v1/elder/guide", () => {
+  const { store } = memoryCoreStore();
+  const at = "2026-11-26T00:00:00.000Z";
+  void store.createUser({ uid: "uid-1", role: "elder", name: "", createdAt: at, updatedAt: at });
+  void store.createUser({
+    uid: "guardian-1",
+    role: "guardian",
+    name: "",
+    createdAt: at,
+    updatedAt: at,
+  });
   const handler = createHttpHandler(
     createRouter([
-      { method: "POST", path: "/v1/elder/guide", handler: createGuideRoute(okModel()) },
+      {
+        method: "POST",
+        path: "/v1/elder/guide",
+        handler: createGuideRoute(okModel(), createProfileGuard(store)),
+      },
     ]),
     log,
   );
@@ -182,6 +261,19 @@ describe("POST /v1/elder/guide", () => {
     const result = await post({ requestId: 1 });
     expect(result.statusCode).toBe(400);
     expect(parseBody(result.body)).toMatchObject({ error: { reason: "invalid-argument" } });
+  });
+
+  it("프로필이 없으면 403 profile-required, 보호자면 403 permission-denied", async () => {
+    const body = {
+      requestId: 1,
+      goal: "OPEN_APP",
+      screen: { pkg: "a", width: 1, height: 1, nodes: [] },
+    };
+    const none = await post(body, "nobody");
+    expect(none.statusCode).toBe(403);
+    expect(parseBody(none.body)).toMatchObject({ error: { reason: "profile-required" } });
+    const guardian = await post(body, "guardian-1");
+    expect(parseBody(guardian.body)).toMatchObject({ error: { reason: "permission-denied" } });
   });
 
   it("인증이 없으면 401", async () => {

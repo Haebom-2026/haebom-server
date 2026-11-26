@@ -18,6 +18,11 @@ describe("maskText", () => {
     expect(maskText(input)).toEqual({ text: input, count: 0 });
   });
 
+  it("원 없이 쉼표로 묶인 금액도 가린다", () => {
+    expect(maskText("잔액 1,234,567 / 출금 12,000").text).toBe("잔액 *** / 출금 ***");
+    expect(maskText("1,000원 미만 999개").text).toBe("*** 미만 999개");
+  });
+
   it("건수를 센다", () => {
     expect(maskText("900101-1234567, 1000원").count).toBe(2);
   });
