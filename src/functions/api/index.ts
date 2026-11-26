@@ -1,4 +1,7 @@
 import { createAwsCoreStore } from "../../core/aws-store.js";
+import { createNotificationRoutes } from "../../core/notification-routes.js";
+import { createAwsNotificationStore } from "../../core/notification-store.js";
+import { createProfileGuard } from "../../core/profile.js";
 import { createCoreRoutes } from "../../core/routes.js";
 import { requireEnv } from "../../shared/config.js";
 import { createHttpHandler } from "../../shared/handler.js";
@@ -7,12 +10,26 @@ import { createLogger } from "../../shared/logger.js";
 import { createRouter } from "../../shared/router.js";
 import { healthz } from "./routes/healthz.js";
 
-/** api-fn: #1~#15, #18~#24 (S1: 사용자·기기·연결) */
+const mainTable = process.env.TABLE_MAIN ?? "haebom-local-main";
+const store = createAwsCoreStore(mainTable);
+const notifications = createAwsNotificationStore(mainTable);
+const idempotency = createAwsIdempotencyStore(process.env.TABLE_IDEM ?? "haebom-local-idem");
+
+/** api-fn: #1~#15, #18~#24 (S1 사용자·기기·연결, S2 알림) */
 export const router = createRouter([
   { method: "GET", path: "/v1/healthz", handler: healthz },
   ...createCoreRoutes({
-    store: createAwsCoreStore(process.env.TABLE_MAIN ?? "haebom-local-main"),
-    idempotency: createAwsIdempotencyStore(process.env.TABLE_IDEM ?? "haebom-local-idem"),
+    store,
+    idempotency,
+    onUnlink: async (elderId, guardianId) => {
+      await notifications.deleteInboxForElder(guardianId, elderId);
+    },
+  }),
+  ...createNotificationRoutes({
+    store,
+    notifications,
+    idempotency,
+    profiles: createProfileGuard(store),
   }),
 ]);
 

@@ -109,3 +109,58 @@ describe("push-fn", () => {
     expect(res.batchItemFailures).toEqual([{ itemIdentifier: "10" }]);
   });
 });
+
+describe("push-fn: 보호자 알림함", () => {
+  const inboxImage = (patch: object = {}) => ({
+    PK: "GUARDIAN#g1",
+    SK: "NOTI#n20261126T060000000Z-abcdef",
+    type: "inbox",
+    id: "n20261126T060000000Z-abcdef",
+    guardianId: "g1",
+    elderId: "e1",
+    notificationType: "sensitive_entry",
+    level: "L1",
+    category: "finance",
+    appName: "토스",
+    ...patch,
+  });
+
+  it("보호자 기기에 data + 짧은 알림을 보낸다 (앱 이름은 넣지 않음)", async () => {
+    const d = deps([device("g1", "dev-g1", "tok-g1"), device("e1", "dev-e1", "tok-e1")], {});
+    await createPushHandler(() => d.value)({ Records: [record("INSERT", inboxImage())] });
+    expect(d.sent).toHaveLength(1);
+    expect(d.sent[0]).toEqual({
+      token: "tok-g1",
+      data: {
+        kind: "notification",
+        id: "n20261126T060000000Z-abcdef",
+        type: "sensitive_entry",
+        elderId: "e1",
+      },
+      notification: {
+        title: "해봄",
+        body: "새 가족 알림이 도착했습니다.",
+        channelId: "family_activity",
+        urgent: false,
+      },
+    });
+    expect(JSON.stringify(d.sent[0]?.notification)).not.toContain("토스");
+  });
+
+  it("종류별 채널: 막힘 help_alerts, SOS·사기 의심 sos_alerts", async () => {
+    const d = deps([device("g1", "dev-g1", "tok-g1")], {});
+    await createPushHandler(() => d.value)({
+      Records: [
+        record("INSERT", { ...inboxImage({ notificationType: "stuck" }), level: "" }, "1"),
+        record("INSERT", inboxImage({ notificationType: "sos" }), "2"),
+        record("INSERT", inboxImage({ category: "scam", level: "L3" }), "3"),
+        record("REMOVE", inboxImage(), "4"),
+      ],
+    });
+    expect(d.sent.map((m) => [m.notification?.channelId, m.notification?.urgent])).toEqual([
+      ["help_alerts", true],
+      ["sos_alerts", true],
+      ["sos_alerts", true],
+    ]);
+  });
+});

@@ -36,6 +36,8 @@ export interface CoreDeps {
   now?: () => Date;
   /** 테스트에서 번호를 고정할 때 */
   randomCode?: () => string;
+  /** 연결이 지워진 뒤 정리 (S2: 보호자 알림함에서 그 어르신 알림 삭제) */
+  onUnlink?: (elderId: string, guardianId: string) => Promise<void>;
 }
 
 const noContent = (): HttpResult => ({ statusCode: 204 });
@@ -225,7 +227,8 @@ export function createCoreRoutes(deps: CoreDeps): Route[] {
         const guardianId = pathParam(params, "guardianId");
         if (!(await store.deleteLink(me.uid, guardianId)))
           throw new ApiError("not-found", "Link not found");
-        // TODO(S2·S3): 보호자 알림함 정리, 남은 보호자가 없는 pending 승인 취소
+        // TODO(S3): 남은 보호자가 없는 pending 승인 취소
+        await deps.onUnlink?.(me.uid, guardianId);
         return noContent();
       },
     },
@@ -239,6 +242,7 @@ export function createCoreRoutes(deps: CoreDeps): Route[] {
         const elderId = pathParam(params, "elderId");
         if (!(await store.deleteLink(elderId, me.uid)))
           throw new ApiError("not-found", "Link not found");
+        await deps.onUnlink?.(elderId, me.uid);
         return noContent();
       },
     },

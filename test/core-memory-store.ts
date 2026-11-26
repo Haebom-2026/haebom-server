@@ -7,6 +7,11 @@ import {
   type LinkRecord,
   type UserProfile,
 } from "../src/core/model.js";
+import type {
+  InboxItem,
+  NotificationRecord,
+  NotificationStore,
+} from "../src/core/notifications.js";
 import type { CodeLookup, CoreStore, RedeemResult } from "../src/core/store.js";
 import type { BeginResult, IdempotencyStore } from "../src/shared/idempotency.js";
 
@@ -130,4 +135,54 @@ export function memoryIdempotencyStore(): IdempotencyStore & { size: () => numbe
       return Promise.resolve();
     },
   };
+}
+
+/** NotificationStore 메모리 구현 */
+export function memoryNotificationStore() {
+  const originals: NotificationRecord[] = [];
+  const inbox = new Map<string, InboxItem>(); // `${gid}|${id}`
+  const dedup = new Map<string, string>(); // `${eid}|${pkg}` → until
+
+  const store: NotificationStore = {
+    create(record, entries, { dedupUntil, now }) {
+      if (dedupUntil !== undefined) {
+        const key = `${record.elderId}|${record.packageName}`;
+        const until = dedup.get(key);
+        if (until !== undefined && until >= now) return Promise.resolve("duplicate_suppressed");
+        dedup.set(key, dedupUntil);
+      }
+      originals.push({ ...record });
+      for (const entry of entries) inbox.set(`${entry.guardianId}|${entry.id}`, { ...entry });
+      return Promise.resolve("created");
+    },
+    listInbox(guardianId, { cursor, since, limit }) {
+      let items = [...inbox.values()]
+        .filter((item) => item.guardianId === guardianId)
+        .sort((a, b) => b.id.localeCompare(a.id));
+      if (since !== undefined) items = items.filter((item) => item.createdAt > since);
+      if (cursor !== undefined) items = items.filter((item) => item.id < cursor);
+      const page = items.slice(0, limit);
+      const last = page.at(-1);
+      return Promise.resolve(
+        items.length > limit && last ? { items: page, nextCursor: last.id } : { items: page },
+      );
+    },
+    markRead(guardianId, id, readAt) {
+      const item = inbox.get(`${guardianId}|${id}`);
+      if (item === undefined) return Promise.resolve(false);
+      item.readAt ??= readAt;
+      return Promise.resolve(true);
+    },
+    deleteInboxForElder(guardianId, elderId) {
+      let count = 0;
+      for (const [key, item] of inbox) {
+        if (item.guardianId === guardianId && item.elderId === elderId) {
+          inbox.delete(key);
+          count++;
+        }
+      }
+      return Promise.resolve(count);
+    },
+  };
+  return { store, originals, inbox };
 }

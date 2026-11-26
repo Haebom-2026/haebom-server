@@ -206,15 +206,15 @@
 
 ### 4.3 추가 엔드포인트 (Firestore 직접 읽기 대체) — 제안
 
-| #   | 메서드 · 경로                             | 호출   | 대체하는 것                                 |
-| --- | ----------------------------------------- | ------ | ------------------------------------------- |
-| 18  | GET /v1/elder/links                       | 고령자 | links(elderId == 나) 조회                   |
-| 19  | GET /v1/elder/approvals/{id}              | 고령자 | approvals/{id} 구독 (FCM 못 받았을 때 폴링) |
-| 20  | GET /v1/guardian/links                    | 보호자 | links(guardianId == 나) 조회                |
-| 21  | GET /v1/guardian/notifications?cursor=    | 보호자 | notifications 구독 (최신순 페이지)          |
-| 22  | POST /v1/guardian/notifications/{id}/read | 보호자 | readBy 갱신                                 |
-| 23  | GET /v1/guardian/approvals?status=pending | 보호자 | approvals 구독                              |
-| 24  | GET /v1/guardian/approvals/{id}           | 보호자 | 승인 상세(남은 시간)                        |
+| #   | 메서드 · 경로                                 | 호출   | 대체하는 것                                               |
+| --- | --------------------------------------------- | ------ | --------------------------------------------------------- |
+| 18  | GET /v1/elder/links                           | 고령자 | links(elderId == 나) 조회                                 |
+| 19  | GET /v1/elder/approvals/{id}                  | 고령자 | approvals/{id} 구독 (FCM 못 받았을 때 폴링)               |
+| 20  | GET /v1/guardian/links                        | 보호자 | links(guardianId == 나) 조회                              |
+| 21  | GET /v1/guardian/notifications?cursor=&since= | 보호자 | notifications 구독 (최신순 페이지, since·serverTime 폴링) |
+| 22  | POST /v1/guardian/notifications/{id}/read     | 보호자 | 보호자별 readAt (204)                                     |
+| 23  | GET /v1/guardian/approvals?status=pending     | 보호자 | approvals 구독                                            |
+| 24  | GET /v1/guardian/approvals/{id}               | 보호자 | 승인 상세(남은 시간)                                      |
 
 ### 4.4 실시간성 대체 방식
 
@@ -372,7 +372,7 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 | S0 ✅   | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포 | –                  |
 | S0.5 ✅ | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
 | S1 ✅   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
-| S2      | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency                                                                                               | 시연 SOS·정부24 L1 |
+| S2 ✅   | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency. 계약: [docs/api/s2-notifications.md](api/s2-notifications.md)                                | 시연 SOS·정부24 L1 |
 | S3      | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
 | S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
 | S5 ✅   | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |

@@ -17,6 +17,42 @@ export interface FcmMessage {
   token: string;
   /** FCM data 는 문자열 값만 받는다. */
   data: Record<string, string>;
+  /** 화면에 보이는 알림. 없으면 data 메시지만 (앱이 조용히 받아 처리). */
+  notification?: {
+    title: string;
+    /** 잠금 화면에 보이므로 짧은 문구만 (앱 이름·내용 넣지 않음) */
+    body: string;
+    /** Android 알림 채널 (보호자 앱에 미리 만들어 둔 것) */
+    channelId: string;
+    urgent: boolean;
+  };
+}
+
+/** FCM v1 message 본문 (토큰·데이터·플랫폼별 옵션) */
+export function buildFcmPayload(message: FcmMessage) {
+  const n = message.notification;
+  if (n === undefined) {
+    return {
+      token: message.token,
+      data: message.data,
+      android: { priority: "HIGH" },
+      // iOS 백그라운드 data 메시지 (APNs 키가 등록된 경우에만 전달됨)
+      apns: { headers: { "apns-priority": "5" }, payload: { aps: { "content-available": 1 } } },
+    };
+  }
+  return {
+    token: message.token,
+    data: message.data,
+    notification: { title: n.title, body: n.body },
+    android: {
+      priority: n.urgent ? "HIGH" : "NORMAL",
+      notification: { channel_id: n.channelId },
+    },
+    apns: {
+      headers: { "apns-priority": n.urgent ? "10" : "5" },
+      payload: { aps: { sound: "default" } },
+    },
+  };
 }
 
 /** sent: 보냄 / unregistered: 토큰이 더 이상 유효하지 않음 (기기 항목을 지운다) */
@@ -107,18 +143,7 @@ export function createFcmSender(options: FcmOptions): FcmSender {
             authorization: `Bearer ${auth.value}`,
             "content-type": "application/json; charset=utf-8",
           },
-          body: JSON.stringify({
-            message: {
-              token: message.token,
-              data: message.data,
-              android: { priority: "HIGH" },
-              // iOS 백그라운드 data 메시지 (APNs 키가 등록된 경우에만 전달됨)
-              apns: {
-                headers: { "apns-priority": "5" },
-                payload: { aps: { "content-available": 1 } },
-              },
-            },
-          }),
+          body: JSON.stringify({ message: buildFcmPayload(message) }),
         },
       );
       if (res.ok) return "sent";

@@ -8,7 +8,7 @@ import type { AttributeValue } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
 import type { DeviceRecord } from "../core/model.js";
 import type { Logger } from "../shared/logger.js";
-import type { FcmSender } from "./fcm.js";
+import type { FcmMessage, FcmSender } from "./fcm.js";
 
 export interface LinkChange {
   change: "created" | "deleted";
@@ -45,11 +45,20 @@ export interface PushDeps {
 }
 
 /** uid 의 모든 기기에 보낸다. 무효 토큰은 지우고, 일시 오류는 throw (Streams 재시도). */
-export async function sendToUser(uid: string, data: Record<string, string>, deps: PushDeps) {
+export async function sendToUser(
+  uid: string,
+  data: Record<string, string>,
+  deps: PushDeps,
+  notification?: FcmMessage["notification"],
+) {
   const devices = await deps.listDevices(uid);
   let sent = 0;
   for (const device of devices) {
-    const result = await deps.sender.send({ token: device.fcmToken, data });
+    const result = await deps.sender.send({
+      token: device.fcmToken,
+      data,
+      ...(notification === undefined ? {} : { notification }),
+    });
     if (result === "unregistered") {
       deps.log.info("removing unregistered device", { uid, deviceId: device.deviceId });
       await deps.deleteDevice(uid, device.deviceId);

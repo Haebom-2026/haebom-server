@@ -1,6 +1,6 @@
 import { generateKeyPairSync, createVerify } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { createFcmSender, signJwt } from "../src/push/fcm.js";
+import { buildFcmPayload, createFcmSender, signJwt } from "../src/push/fcm.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const account = {
@@ -75,5 +75,24 @@ describe("createFcmSender", () => {
       fetchFn: fakeFetch(503).fn,
     });
     await expect(down.send({ token: "t", data: {} })).rejects.toThrow("FCM send failed: 503");
+  });
+});
+
+describe("buildFcmPayload", () => {
+  it("data 메시지는 notification 없이, 알림은 채널·우선순위를 넣는다", () => {
+    expect(buildFcmPayload({ token: "t", data: { kind: "link" } })).not.toHaveProperty(
+      "notification",
+    );
+    expect(
+      buildFcmPayload({
+        token: "t",
+        data: { kind: "notification" },
+        notification: { title: "해봄", body: "b", channelId: "sos_alerts", urgent: true },
+      }),
+    ).toMatchObject({
+      notification: { title: "해봄", body: "b" },
+      android: { priority: "HIGH", notification: { channel_id: "sos_alerts" } },
+      apns: { headers: { "apns-priority": "10" } },
+    });
   });
 });
