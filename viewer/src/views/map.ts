@@ -173,7 +173,7 @@ export function mapView(root: HTMLElement): () => void {
       h(
         "p",
         { class: "muted small hint" },
-        "묶어 보기: 점 하나 = 같은 화면 묶음, 크기와 숫자 = 화면 수, 누르면 안의 화면 목록. 낱개: 점 하나 = 화면 한 번, 같은 화면끼리 선. 속이 빈 점은 같은 화면이 하나뿐인 것(갈렸을 수 있음), 점선 테두리는 서버가 판단을 보류한 화면. 휠로 확대, 끌어서 이동.",
+        "묶어 보기: 점 하나 = 같은 화면 묶음, 크기와 숫자 = 화면 수, 누르면 안의 화면 목록. 낱개: 점 하나 = 화면 한 번, 같은 화면끼리 선. 속이 빈 점은 같은 화면이 하나뿐인 것(갈렸을 수 있음), 점선 테두리는 서버가 판단을 보류한 화면이 들어 있는 것. 휠로 확대, 끌어서 이동.",
       ),
       h("div", { class: "map-split" }, canvas, panel),
     ),
@@ -336,6 +336,10 @@ export function mapView(root: HTMLElement): () => void {
     if (!selected) renderOverview(groups, pkgs);
   }
 
+  /** 묶어 보기: 묶음 안 판단 보류 화면 수, 낱개: 그 화면이 판단 보류면 1 */
+  const ambiguousCount = (d: Dot) =>
+    (mode === "group" ? d.members : [d.doc]).filter((m) => m.match?.kind === "ambiguous").length;
+
   function draw(pkgs: string[]) {
     linkLayer.replaceChildren(
       ...links.map((l) =>
@@ -358,7 +362,7 @@ export function mapView(root: HTMLElement): () => void {
           class: [
             d.members.length === 1 ? "alone" : "",
             d.doc.guideType ? "guide" : "",
-            rule === "page" && d.doc.match?.kind === "ambiguous" ? "ambiguous" : "",
+            rule === "page" && ambiguousCount(d) > 0 ? "ambiguous" : "",
             selected?.id === d.id ? "selected" : "",
           ].join(" "),
           style: `--h:${fpHue(d.doc.pkg)}`,
@@ -369,14 +373,21 @@ export function mapView(root: HTMLElement): () => void {
     // 묶음 점 안의 화면 수
     countLayer.replaceChildren(
       ...[...dots.values()]
-        .filter((d) => mode === "group" && d.members.length > 1 && d.r >= 9)
-        .map((d) =>
-          s(
+        .filter((d) => mode === "group" && d.members.length > 1)
+        .map((d) => {
+          // 작은 점에도 들어가도록 글자 크기를 반지름에 맞춘다
+          const size = Math.min(10, d.r * (d.members.length >= 10 ? 0.95 : 1.25));
+          return s(
             "text",
-            { x: d.x ?? 0, y: (d.y ?? 0) + 3.5, class: "count", "data-id": d.id },
+            {
+              x: d.x ?? 0,
+              y: (d.y ?? 0) + size * 0.35,
+              class: "count",
+              style: `font-size:${size}px`,
+            },
             d.members.length,
-          ),
-        ),
+          );
+        }),
     );
     // 앱 이름: 그 앱 점들의 위쪽
     labelLayer.replaceChildren(
@@ -520,6 +531,9 @@ export function mapView(root: HTMLElement): () => void {
         doc.guideType ? h("span", { class: "tag" }, `guide ${doc.guideType}`) : null,
       ),
       ...(doc.match ? [h("div", { class: "small" }, matchLine(doc.match))] : []),
+      ...(mode === "group" && rule === "page" && ambiguousCount(dot) > 0
+        ? [h("div", { class: "small match-ambiguous" }, `판단 보류 ${ambiguousCount(dot)}개 포함`)]
+        : []),
       h(
         "div",
         { class: "tip-body" },

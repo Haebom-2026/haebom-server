@@ -784,10 +784,11 @@ svg.wire rect.act {
   max-width: 300px;
   margin: 0 auto;
 }
+/* 판단 보류: 속은 원래대로(찬 점·빈 점 구분 유지), 테두리만 경고색 점선 */
 svg.map circle.ambiguous {
-  stroke-dasharray: 2 2;
+  stroke: var(--warn);
+  stroke-dasharray: 3 2;
   stroke-width: 2;
-  fill: var(--panel);
 }
 .match-new {
   color: var(--ok);
@@ -800,9 +801,6 @@ svg.map text.count {
   stroke: none;
   font-size: 10px;
   font-weight: 700;
-}
-svg.map circle.alone + text.count {
-  fill: var(--text);
 }
 .group-list {
   list-style: none;
