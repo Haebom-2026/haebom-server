@@ -2,4 +2,4 @@
 firebase_project_id = "copilot-demo-c9a74"
 
 # 디버그 뷰어를 쓸 개발자 Google 계정 이메일
-debug_viewer_emails = []
+debug_viewer_emails = ["kyumin12271227@g.yju.ac.kr"]
