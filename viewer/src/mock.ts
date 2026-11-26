@@ -9,7 +9,12 @@ import type { Device, Pin, ScreenDocument, ScreenNode, ScreenSummary } from "./t
 const W = 1080;
 const H = 2400;
 
-type Template = { name: string; fp: string; nodes: (clock: string) => ScreenNode[] };
+type Template = {
+  name: string;
+  fp: string;
+  pkg?: string;
+  nodes: (clock: string, step: number) => ScreenNode[];
+};
 
 const statusBar = (clock: string): ScreenNode[] => [
   { i: 0, t: clock, c: "TextView", b: [40, 20, 200, 80] },
@@ -84,6 +89,27 @@ const TEMPLATES: Template[] = [
   },
 ];
 
+/** 영상 제목이 계속 바뀌는 화면: fp@v1 은 매번 갈리고 "누를 수 있는 것만" 이면 하나로 묶인다 */
+const VIDEOS = ["트로트 메들리 1시간", "아침 체조 따라하기", "고향의 봄 합창", "오늘의 날씨"];
+TEMPLATES.push({
+  name: "유튜브 홈",
+  fp: "",
+  pkg: "com.google.android.youtube",
+  nodes: (clock, step) => [
+    ...statusBar(clock),
+    { i: 2, d: "검색", c: "ImageButton", b: [900, 120, 1040, 240], clickable: true },
+    {
+      i: 3,
+      t: VIDEOS[step % VIDEOS.length] ?? "",
+      c: "TextView",
+      b: [40, 900, 1040, 980],
+    },
+    { i: 4, d: "동영상 재생", c: "View", b: [0, 280, 1080, 880], clickable: true },
+    { i: 5, t: "홈", c: "Button", b: [0, 2240, 270, 2400], clickable: true },
+    { i: 6, t: "구독", c: "Button", b: [540, 2240, 810, 2400], clickable: true },
+  ],
+});
+
 /** 정부24 흐름: 메인 → 목록 → 신청 → 목록(뒤로) → 신청 → 인증 → 메인 … */
 const FLOW = [0, 1, 2, 1, 2, 3, 0];
 
@@ -101,23 +127,40 @@ const clockText = (date: Date) => {
   return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${pad(date.getMinutes())}`;
 };
 
-function addScreen(deviceId: string, step: number, at: Date) {
-  const template = TEMPLATES[FLOW[step % FLOW.length] ?? 0] ?? TEMPLATES[0];
+function addScreen(deviceId: string, step: number, at: Date, index?: number) {
+  const template = TEMPLATES[index ?? FLOW[step % FLOW.length] ?? 0] ?? TEMPLATES[0];
   if (!template) return;
-  const nodes = template.nodes(clockText(at));
+  let nodes = template.nodes(clockText(at), step);
+  let fp = template.fp || `${template.name}-${step % VIDEOS.length}`;
+  // 정부24 메인: 가끔 공지 배너가 위에 붙어 아래 노드가 밀린다 → fp@v1 이 갈린다
+  if (template.name === "정부24 메인" && step % 3 === 1) {
+    nodes = [
+      ...nodes.map((n) =>
+        n.b && n.b[1] > 100 && n.b[1] < 2200
+          ? {
+              ...n,
+              b: [n.b[0], n.b[1] + 260, n.b[2], n.b[3] + 260] as [number, number, number, number],
+            }
+          : n,
+      ),
+      { i: nodes.length, t: "시스템 점검 안내", c: "TextView", b: [60, 260, 1020, 380] },
+    ];
+    fp = `${template.fp.slice(0, 15)}b`;
+  }
+  const pkg = template.pkg ?? "kr.go.gov24";
   screens.push({
     screenId: screenIdAt(at),
     deviceId,
     receivedAt: at.toISOString(),
     capturedAt: new Date(at.getTime() - 120).toISOString(),
-    pkg: "kr.go.gov24",
-    appHash: template.fp.slice(0, 8),
-    fingerprint: template.fp,
+    pkg,
+    appHash: fp.slice(0, 8),
+    fingerprint: fp,
     fpVersion: "fp@v1",
     nodeCount: nodes.length,
     maskedCount: template.name === "등본 신청" ? 1 : 0,
     pinned: false,
-    screen: { pkg: "kr.go.gov24", width: W, height: H, nodes },
+    screen: { pkg, width: W, height: H, nodes },
   });
   const device = devices.get(deviceId);
   if (device) {
@@ -152,6 +195,9 @@ for (let step = 0; step < 8; step++)
   addScreen("a3f9c1e2-demo-a", step, new Date(start - (8 - step) * 7000));
 for (let step = 0; step < 5; step++) {
   addScreen("b7d20f44-demo-b", step, new Date(start - 2 * 3600_000 - (5 - step) * 9000));
+}
+for (let step = 0; step < 6; step++) {
+  addScreen("b7d20f44-demo-b", step, new Date(start - 2 * 3600_000 + step * 5000), 4);
 }
 const bDevice = devices.get("b7d20f44-demo-b");
 if (bDevice) bDevice.lastSeenAt = new Date(start - 2 * 3600_000).toISOString();

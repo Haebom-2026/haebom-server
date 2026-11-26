@@ -4,6 +4,7 @@ import { logOut, signIn, watchUser } from "./auth.ts";
 import { h } from "./dom.ts";
 import { deviceView } from "./views/device.ts";
 import { devicesView } from "./views/devices.ts";
+import { mapView } from "./views/map.ts";
 import { pinsView } from "./views/pins.ts";
 
 const app = document.querySelector<HTMLElement>("#app");
@@ -15,6 +16,7 @@ const nav = h(
   "nav",
   {},
   h("a", { href: "#/", "data-route": "devices" }, "기기"),
+  h("a", { href: "#/map", "data-route": "map" }, "화면 지도"),
   h("a", { href: "#/pins", "data-route": "pins" }, "보관 세션"),
 );
 
@@ -42,7 +44,8 @@ function route() {
   const parts = path.split("/").filter(Boolean);
 
   for (const link of nav.querySelectorAll("a")) {
-    const active = link.dataset.route === (parts[0] === "pins" ? "pins" : "devices");
+    const section = parts[0] === "pins" || parts[0] === "map" ? parts[0] : "devices";
+    const active = link.dataset.route === section;
     link.classList.toggle("active", active);
   }
 
@@ -50,6 +53,8 @@ function route() {
     const from = params.get("from");
     const to = params.get("to");
     cleanup = deviceView(main, decodeURIComponent(parts[1]), from && to ? { from, to } : undefined);
+  } else if (parts[0] === "map") {
+    cleanup = mapView(main);
   } else if (parts[0] === "pins") {
     cleanup = pinsView(main);
   } else {

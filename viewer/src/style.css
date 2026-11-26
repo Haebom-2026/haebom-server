@@ -547,3 +547,240 @@ svg.phone {
     padding: 10px 16px;
   }
 }
+
+/* 화면 지도 */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg button {
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+  color: var(--text);
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg button + button {
+  border-left: 1px solid var(--line);
+}
+.seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.map-toolbar {
+  margin-bottom: 4px;
+}
+.map-stats {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+  margin-left: auto;
+}
+.map-stats b {
+  color: var(--text);
+  font-size: 15px;
+}
+.map-split {
+  display: grid;
+  grid-template-columns: 1fr minmax(320px, 440px);
+  gap: 16px;
+  align-items: start;
+}
+.map-canvas {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  height: calc(100vh - 220px);
+  min-height: 420px;
+  overflow: hidden;
+}
+svg.map {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+svg.map.dragging {
+  cursor: grabbing;
+}
+svg.map line {
+  stroke: hsl(var(--h) 60% var(--fp-l));
+  stroke-opacity: 0.45;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+svg.map circle {
+  fill: hsl(var(--h) 65% var(--fp-l));
+  stroke: hsl(var(--h) 65% var(--fp-l));
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: opacity 0.1s;
+}
+svg.map circle.alone {
+  fill: var(--panel);
+}
+svg.map circle.guide {
+  stroke: var(--target);
+  stroke-width: 2.5;
+}
+svg.map circle.selected {
+  stroke: var(--text);
+  stroke-width: 3;
+}
+svg.map text {
+  fill: hsl(var(--h) 55% var(--fp-l));
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--panel);
+  stroke-width: 3px;
+}
+svg.map.focus circle:not(.hl),
+svg.map.focus line:not(.hl) {
+  opacity: 0.15;
+}
+svg.map line.hl {
+  stroke-opacity: 1;
+  stroke-width: 2.5;
+}
+.map-tip {
+  position: absolute;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+  padding: 10px;
+  pointer-events: none;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  z-index: 3;
+}
+.map-tip[hidden] {
+  display: none;
+}
+.tip-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tip-body {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+.tip-texts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  display: grid;
+  gap: 2px;
+  align-content: start;
+}
+.tip-texts li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+svg.wire {
+  width: 100%;
+  height: auto;
+  background: var(--phone);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+svg.wire rect {
+  fill: var(--node);
+  fill-opacity: 0.08;
+  stroke: var(--node);
+  stroke-width: 0.6;
+}
+svg.wire rect.act {
+  fill: var(--node-click);
+  fill-opacity: 0.2;
+  stroke: var(--node-click);
+}
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: hsl(var(--h) 65% var(--fp-l));
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.map-panel {
+  position: sticky;
+  top: 64px;
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+}
+.map-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.small-title {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+.pkg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.pkg-table th,
+.pkg-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.pkg-table .num {
+  text-align: right;
+}
+.pkg-cell {
+  word-break: break-all;
+}
+@media (max-width: 960px) {
+  .map-split {
+    grid-template-columns: 1fr;
+  }
+  .map-canvas {
+    height: 60vh;
+  }
+  .map-panel {
+    position: static;
+    max-height: none;
+  }
+  .map-stats {
+    margin-left: 0;
+  }
+}
+/* 지도 오른쪽은 좁으므로 화면·노드 목록을 위아래로 */
+.map-panel .screen-body {
+  grid-template-columns: 1fr;
+}
+.map-panel .phone-wrap {
+  max-width: 300px;
+  margin: 0 auto;
+}
