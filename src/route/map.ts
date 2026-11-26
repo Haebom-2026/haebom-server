@@ -27,6 +27,11 @@ export const roleSchema = z.object({
 export const appSchema = z.object({
   id,
   name: text,
+  /**
+   * 어르신이 앱 이름을 실제로 말했는지 판정하는 이름들 (4.2 "말한 앱").
+   * jev 확률은 "말했다"는 증거가 아니다. "전화"처럼 다른 말에 섞이기 쉬운 일반어는 넣지 않는다
+   */
+  aliases: z.array(text).default([]),
   /** jev 1단계 후보 설명 */
   desc: text,
   /** 같은 일을 대신할 수 있는 앱끼리 묶는다. 한 앱이 여러 역할일 수 있다 (유튜브 = 영상·음악) */
@@ -58,6 +63,8 @@ export const mapSchema = z
     roles: z.array(roleSchema),
     apps: z.array(appSchema).min(1),
     goals: z.array(goalSchema),
+    /** 지도에 없지만 어르신이 말할 만한 앱 이름. 말에 있으면 route 없이 Claude (4.2) */
+    otherAppNames: z.array(text).default([]),
   })
   .superRefine((map, ctx) => {
     const issue = (message: string) => {
@@ -98,6 +105,18 @@ export const mapSchema = z
         issue(`역할 ${role.id}: 기본 앱 ${app.id} 가 이 역할이 아님`);
       if (role.sensitive) issue(`민감한 역할 ${role.id} 에는 기본 앱을 두지 않음`);
     }
+    // 같은 이름이 두 앱(또는 지도 밖 이름)에 걸리면 "말한 앱"을 정할 수 없다
+    const owner = new Map<string, string>();
+    const claim = (alias: string, who: string) => {
+      const key = normalizeName(alias);
+      const prev = owner.get(key);
+      if (prev !== undefined && prev !== who)
+        issue(`앱 이름 "${alias}" 이 ${prev} 와 ${who} 에 겹침`);
+      owner.set(key, who);
+    };
+    for (const app of map.apps) for (const alias of app.aliases) claim(alias, app.id);
+    for (const name of map.otherAppNames) claim(name, "(지도 밖)");
+
     for (const goal of map.goals) {
       if (!apps.has(goal.app)) issue(`${goal.id}: 없는 앱 ${goal.app}`);
       if (!goal.id.startsWith(`${goal.app}.`))
@@ -105,6 +124,9 @@ export const mapSchema = z
       if (goal.id.endsWith(".none")) issue(`${goal.id}: none 은 목표 이름으로 쓸 수 없음`);
     }
   });
+
+/** 이름 비교용: 띄어쓰기를 없애고 소문자로 ("정부 24" = "정부24", "카카오T" = "카카오t") */
+export const normalizeName = (text: string): string => text.replace(/\s+/g, "").toLowerCase();
 
 export type MapInput = z.input<typeof mapSchema>;
 export type RouteMap = z.output<typeof mapSchema>;
