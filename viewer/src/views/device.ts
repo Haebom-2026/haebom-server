@@ -150,6 +150,13 @@ export function deviceView(
           fpChip(x.fingerprint),
           h("span", { class: "pkg" }, x.pkg),
           h("span", { class: "muted small num" }, `${x.nodeCount}`),
+          x.guideType
+            ? h(
+                "span",
+                { class: "tag ai", title: "guide 요청 (AI 판단 기록)" },
+                `AI ${x.guideType}`,
+              )
+            : null,
           x.pinned ? h("span", { class: "tag", title: "보관됨 (30일)" }, "보관") : null,
           x.maskedCount ? h("span", { class: "tag warn", title: "민감 정보 마스킹" }, "M") : null,
         );

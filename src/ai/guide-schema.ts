@@ -3,7 +3,7 @@
  * 화면(screen)은 디버그 뷰어와 같은 모양을 쓴다 → 앱은 같은 화면 객체를 두 곳에 보낼 수 있다.
  */
 import { z } from "zod";
-import { screenSchema } from "../debug/schema.js";
+import { deviceIdSchema, screenSchema } from "../debug/schema.js";
 
 export const GUIDE_TYPES = ["highlight", "suggest", "swipe", "ask", "say", "done"] as const;
 export const SWIPE_DIRS = ["up", "down", "left", "right"] as const;
@@ -18,6 +18,8 @@ export const guideRequestSchema = z.object({
   /** 지금까지 안내한 단계 (오래된 것부터, 최대 10개) */
   history: z.array(z.string().max(200)).max(10).default([]),
   screen: screenSchema,
+  /** (dev 디버그용, 선택) 디버그 뷰어 기기 ID. 이 기기 아래에 요청·판단이 기록된다. 서버 동작에는 영향 없음 */
+  deviceId: deviceIdSchema.optional(),
 });
 
 export type GuideRequest = z.output<typeof guideRequestSchema>;

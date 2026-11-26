@@ -1,0 +1,92 @@
+/**
+ * guide 요청을 디버그 뷰어에 남긴다 (dev 전용, docs/server-plan.md 12장).
+ *
+ * 화면 하나 = 디버그 저장소의 화면 문서 하나. 여기에 guide 필드로
+ *   - request : 앱이 보낸 목표·한 말·slots·history
+ *   - ai      : AI 에 보낸 입력 그대로, 모델의 원래 출력, 상태·지연·토큰
+ *   - response: 서버가 검증해 앱에 보낸 최종 응답
+ * 을 붙인다. 뷰어의 기존 화면 패널이 target 을 화면 위에 표시한다.
+ *
+ * 저장은 응답에 영향을 주지 않는다: 실패하면 로그만 남긴다.
+ */
+import { randomBytes } from "node:crypto";
+import type { GuideRequest, GuideResponse } from "../ai/guide-schema.js";
+import type { GuideTrace } from "../ai/guide.js";
+import { FINGERPRINT_VERSION, fingerprint } from "../cache/fingerprint.js";
+import { maskDeep } from "../shared/sensitive.js";
+import { newScreenId, type DebugStore } from "./store.js";
+
+export interface GuideTraceRecord {
+  uid: string;
+  request: GuideRequest;
+  response: GuideResponse;
+  trace: GuideTrace;
+  model: string;
+  receivedAt: Date;
+  /** 앱이 보낸 디버그 기기 ID. 없으면 같은 uid 의 최근 기기, 그것도 없으면 uid 기반 가상 기기 */
+  deviceId?: string | undefined;
+}
+
+export interface GuideTraceRecorder {
+  record(entry: GuideTraceRecord): Promise<{ deviceId: string; screenId: string }>;
+}
+
+/** deviceIdSchema 규칙(8~64자 [A-Za-z0-9_-])에 맞는 uid 기반 기기 ID */
+export const uidDeviceId = (uid: string): string =>
+  `uid-${uid.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60)}`.padEnd(8, "0");
+
+export function createGuideTraceRecorder(store: DebugStore): GuideTraceRecorder {
+  const resolveDevice = async (uid: string, deviceId?: string): Promise<string> => {
+    if (deviceId) return deviceId;
+    // 실제 기기(heartbeat 로 등록)만 고른다. uid 기반 가상 기기는 실제 기기가 없을 때만 쓴다
+    const virtual = uidDeviceId(uid);
+    const mine = (await store.listDevices())
+      .filter((device) => device.uid === uid && device.deviceId !== virtual)
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+    return mine[0]?.deviceId ?? virtual;
+  };
+
+  return {
+    async record({ uid, request, response, trace, model, receivedAt, deviceId }) {
+      const device = await resolveDevice(uid, deviceId);
+      const masked = maskDeep(request.screen.nodes);
+      const screen = { ...request.screen, nodes: masked.value };
+      const screenId = newScreenId(receivedAt, randomBytes(3).toString("hex"));
+      const history = maskDeep({
+        utterance: request.utterance,
+        slots: request.slots,
+        history: request.history,
+      }).value;
+
+      await store.saveScreen({
+        uid,
+        // guide 요청은 화면이 같아도 매번 남긴다 (요청마다 판단이 다를 수 있음)
+        dedupeKey: `guide|${screenId}`,
+        screenId,
+        deviceId: device,
+        receivedAt: receivedAt.toISOString(),
+        capturedAt: receivedAt.toISOString(),
+        pkg: screen.pkg,
+        ...(screen.hash === undefined ? {} : { appHash: screen.hash }),
+        fingerprint: fingerprint(screen),
+        fpVersion: FINGERPRINT_VERSION,
+        nodeCount: screen.nodes.length,
+        maskedCount: masked.count,
+        pinned: false,
+        guideType: response.type,
+        screen,
+        guide: {
+          // 뷰어 화면 패널이 바로 읽는 요약
+          type: response.type,
+          say: response.say,
+          ...(response.target === undefined ? {} : { target: response.target }),
+          ...(trace.latencyMs === undefined ? {} : { latencyMs: trace.latencyMs }),
+          request: { requestId: request.requestId, goal: request.goal, ...history },
+          ai: { model, ...trace },
+          response,
+        },
+      });
+      return { deviceId: device, screenId };
+    },
+  };
+}

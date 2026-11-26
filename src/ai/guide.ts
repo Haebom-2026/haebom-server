@@ -55,6 +55,26 @@ export type GuideModelResult =
 
 export type GuideModel = (input: GuidePromptInput) => Promise<GuideModelResult>;
 
+/**
+ * 요청 하나를 처리한 과정 (디버그 뷰어용, dev 에서만 저장).
+ * AI 에 보낸 입력과 모델의 원래 출력을 그대로 담는다 — 서버 후처리로 응답이 달라졌는지 보려고.
+ */
+export interface GuideTrace {
+  promptVersion: string;
+  /** 모델을 부르지 않은 이유 */
+  skipped?: "empty-screen" | "secret-screen";
+  /** AI 에 보낸 그대로 (마스킹 후, 위치 %·상태 포함) */
+  input?: GuidePromptInput;
+  masked?: number;
+  status?: GuideModelResult["status"] | "error";
+  stopReason?: string | null;
+  /** 모델의 원래 출력 (후처리 전) */
+  output?: GuideModelOutput;
+  usage?: ModelUsage;
+  latencyMs?: number;
+  error?: string;
+}
+
 const SECRET_FIELD =
   /비밀\s?번호|패스워드|password|passcode|암호|인증\s?번호|OTP|보안\s?카드|CVC|CVV|PIN\b|핀\s?번호|주민\s?(등록)?\s?번호|생년월일\s?6자리/i;
 
@@ -187,35 +207,54 @@ export async function guide(
   request: GuideRequest,
   model: GuideModel,
   log: Logger,
+  onTrace?: (trace: GuideTrace) => void,
 ): Promise<GuideResponse> {
   const { requestId } = request;
-  const say = (text: string): GuideResponse => ({ requestId, type: "say", say: text });
+  const trace: GuideTrace = { promptVersion: GUIDE_PROMPT_VERSION };
+  const say = (text: string): GuideResponse => {
+    onTrace?.(trace);
+    return { requestId, type: "say", say: text };
+  };
 
   // 시스템 창(밝기 막대 등)만 떠 있거나 화면을 못 읽으면 노드가 0개다. 모델이 볼 것이 없으니 부르지 않는다.
   if (request.screen.nodes.length === 0) {
     log.info("guide skipped", { reason: "empty-screen", pkg: request.screen.pkg });
+    trace.skipped = "empty-screen";
     return say(FALLBACK_SAY.empty);
   }
 
   if (isSecretScreen(request)) {
     log.info("guide skipped", { reason: "secret-screen", pkg: request.screen.pkg });
+    trace.skipped = "secret-screen";
     return say(FALLBACK_SAY.secret);
   }
 
   const { input, masked } = toPromptInput(request);
+  trace.input = input;
+  trace.masked = masked;
   const started = Date.now();
   let result: GuideModelResult;
   try {
     result = await model(input);
   } catch (error) {
     log.warn("guide model failed", { error, latencyMs: Date.now() - started });
+    trace.status = "error";
+    trace.error = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    trace.latencyMs = Date.now() - started;
     return say(FALLBACK_SAY.busy);
   }
+
+  trace.status = result.status;
+  trace.stopReason = result.stopReason;
+  trace.usage = result.usage;
+  trace.latencyMs = Date.now() - started;
+  if (result.status === "ok") trace.output = result.output;
 
   const response =
     result.status === "ok"
       ? finalize(requestId, result.output, nodeTexts(request))
       : say(FALLBACK_SAY.unsure);
+  if (result.status === "ok") onTrace?.(trace);
 
   log.info("guide completed", {
     promptVersion: GUIDE_PROMPT_VERSION,

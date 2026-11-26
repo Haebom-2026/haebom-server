@@ -32,6 +32,8 @@ export interface ScreenSummary {
   nodeCount: number;
   maskedCount: number;
   pinned: boolean;
+  /** guide 요청으로 저장된 화면이면 그 응답 type (목록에서 구분용) */
+  guideType?: string;
 }
 
 /** S3 에 저장하는 화면 원본 (마스킹 후). S5 이후 guide 응답이 붙는다. */
@@ -92,6 +94,7 @@ export function summaryOf(doc: ScreenDocument): ScreenSummary {
     nodeCount: doc.nodeCount,
     maskedCount: doc.maskedCount,
     pinned: doc.pinned,
+    ...(doc.guideType === undefined ? {} : { guideType: doc.guideType }),
   };
 }
 

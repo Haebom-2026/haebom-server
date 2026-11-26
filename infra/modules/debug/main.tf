@@ -156,3 +156,25 @@ resource "aws_lambda_permission" "invoke" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${var.api_execution_arn}/*/*"
 }
+
+# ai-fn 이 guide 요청·AI 판단을 디버그 저장소에 기록하는 권한 (src/debug/guide-trace.ts)
+data "aws_iam_policy_document" "ai_trace" {
+  statement {
+    sid       = "DebugTableWrite"
+    actions   = ["dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:Scan"]
+    resources = [aws_dynamodb_table.debug.arn]
+  }
+  statement {
+    sid       = "DebugScreensWrite"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.debug.arn}/screens/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "ai_trace" {
+  count = var.ai_role_name == "" ? 0 : 1
+
+  name   = "debug-trace"
+  role   = var.ai_role_name
+  policy = data.aws_iam_policy_document.ai_trace.json
+}

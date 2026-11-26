@@ -36,3 +36,8 @@ output "lambda_boundary_arn" {
 output "common_env" {
   value = local.common_env
 }
+
+# 디버그 모듈이 ai-fn 에 기록 권한을 붙일 때 쓴다
+output "ai_role_name" {
+  value = module.ai_fn.role_name
+}
