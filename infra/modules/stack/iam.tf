@@ -40,6 +40,11 @@ data "aws_iam_policy_document" "ai" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [module.secrets.arns["anthropic-api-key"]]
   }
+  statement {
+    sid       = "OpenRouterKey"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [module.secrets.arns["openrouter-api-key"]]
+  }
 }
 
 data "aws_iam_policy_document" "push" {

@@ -1,0 +1,1088 @@
+{
+  "version": "map@test-large-1",
+  "roles": [
+    {
+      "id": "appstore",
+      "name": "앱 설치",
+      "sensitive": false,
+      "defaultApp": "playstore"
+    },
+    {
+      "id": "bank",
+      "name": "은행",
+      "sensitive": true
+    },
+    {
+      "id": "browser",
+      "name": "웹사이트 열기",
+      "sensitive": false,
+      "defaultApp": "chrome"
+    },
+    {
+      "id": "calculator",
+      "name": "계산기",
+      "sensitive": false,
+      "defaultApp": "calculator"
+    },
+    {
+      "id": "calendar",
+      "name": "일정",
+      "sensitive": false,
+      "defaultApp": "calendar"
+    },
+    {
+      "id": "call",
+      "name": "전화 걸기",
+      "sensitive": false,
+      "defaultApp": "phone"
+    },
+    {
+      "id": "camera",
+      "name": "사진 찍기",
+      "sensitive": false,
+      "defaultApp": "camera"
+    },
+    {
+      "id": "clock",
+      "name": "알람",
+      "sensitive": false,
+      "defaultApp": "clock"
+    },
+    {
+      "id": "contacts",
+      "name": "연락처",
+      "sensitive": false,
+      "defaultApp": "contacts"
+    },
+    {
+      "id": "delivery",
+      "name": "음식 배달",
+      "sensitive": false,
+      "defaultApp": "baemin"
+    },
+    {
+      "id": "files",
+      "name": "파일 찾기",
+      "sensitive": false,
+      "defaultApp": "files"
+    },
+    {
+      "id": "gallery",
+      "name": "사진 보기",
+      "sensitive": false,
+      "defaultApp": "gallery"
+    },
+    {
+      "id": "gov",
+      "name": "공공 서류",
+      "sensitive": false,
+      "defaultApp": "gov24"
+    },
+    {
+      "id": "health_ins",
+      "name": "건강보험",
+      "sensitive": false,
+      "defaultApp": "nhis"
+    },
+    {
+      "id": "hospital",
+      "name": "병원 예약",
+      "sensitive": false,
+      "defaultApp": "ddocdoc"
+    },
+    {
+      "id": "id",
+      "name": "신분증",
+      "sensitive": false,
+      "defaultApp": "mobile_id"
+    },
+    {
+      "id": "map",
+      "name": "길 찾기",
+      "sensitive": false,
+      "defaultApp": "kakaomap"
+    },
+    {
+      "id": "memo",
+      "name": "메모",
+      "sensitive": false,
+      "defaultApp": "memo"
+    },
+    {
+      "id": "messaging",
+      "name": "메시지 보내기",
+      "sensitive": false,
+      "defaultApp": "kakaotalk"
+    },
+    {
+      "id": "music",
+      "name": "노래 듣기",
+      "sensitive": false,
+      "defaultApp": "youtube"
+    },
+    {
+      "id": "pay",
+      "name": "간편 결제",
+      "sensitive": true
+    },
+    {
+      "id": "pension",
+      "name": "국민연금",
+      "sensitive": false,
+      "defaultApp": "nps"
+    },
+    {
+      "id": "search",
+      "name": "인터넷 검색",
+      "sensitive": false,
+      "defaultApp": "naver"
+    },
+    {
+      "id": "secondhand",
+      "name": "중고 거래",
+      "sensitive": false,
+      "defaultApp": "daangn"
+    },
+    {
+      "id": "settings",
+      "name": "휴대폰 설정",
+      "sensitive": false,
+      "defaultApp": "settings"
+    },
+    {
+      "id": "shopping",
+      "name": "물건 주문",
+      "sensitive": false,
+      "defaultApp": "coupang"
+    },
+    {
+      "id": "sns",
+      "name": "사진·글 올리기",
+      "sensitive": false
+    },
+    {
+      "id": "tax",
+      "name": "세금",
+      "sensitive": false,
+      "defaultApp": "hometax"
+    },
+    {
+      "id": "taxi",
+      "name": "택시 부르기",
+      "sensitive": false,
+      "defaultApp": "kakaot"
+    },
+    {
+      "id": "train",
+      "name": "기차표",
+      "sensitive": false,
+      "defaultApp": "korail"
+    },
+    {
+      "id": "transit",
+      "name": "버스·지하철",
+      "sensitive": false,
+      "defaultApp": "kakaobus"
+    },
+    {
+      "id": "video",
+      "name": "영상 보기",
+      "sensitive": false,
+      "defaultApp": "youtube"
+    },
+    {
+      "id": "weather",
+      "name": "날씨",
+      "sensitive": false,
+      "defaultApp": "weather"
+    }
+  ],
+  "apps": [
+    {
+      "id": "gov24",
+      "name": "정부24",
+      "desc": "정부24 앱. 주민등록등본·초본, 가족관계증명서 같은 공공 서류 발급, 민원 신청",
+      "roles": ["gov"],
+      "packages": ["kr.go.minwon.m"]
+    },
+    {
+      "id": "youtube",
+      "name": "유튜브",
+      "desc": "유튜브 앱. 영상·노래·공연 찾아보기, 영상 틀기",
+      "roles": ["video", "music"],
+      "packages": ["com.google.android.youtube"]
+    },
+    {
+      "id": "contacts",
+      "name": "연락처",
+      "desc": "휴대폰 기본 연락처(전화번호부) 앱. 전화번호 저장, 연락처 찾기·고치기·지우기",
+      "roles": ["contacts"],
+      "packages": ["com.samsung.android.app.contacts"]
+    },
+    {
+      "id": "phone",
+      "name": "전화",
+      "desc": "전화 앱. 누군가에게 전화 걸기, 받은 전화·놓친 전화 보기",
+      "roles": ["call"],
+      "packages": ["com.samsung.android.dialer"]
+    },
+    {
+      "id": "settings",
+      "name": "설정",
+      "desc": "휴대폰 설정. 화면 밝기·글자 크기·화면 꺼짐 시간, 소리, 와이파이, 블루투스",
+      "roles": ["settings"],
+      "packages": ["com.android.settings"]
+    },
+    {
+      "id": "gallery",
+      "name": "갤러리",
+      "desc": "사진첩. 찍은 사진·영상 보기, 사진 지우기",
+      "roles": ["gallery"],
+      "packages": ["com.sec.android.gallery3d"]
+    },
+    {
+      "id": "camera",
+      "name": "카메라",
+      "desc": "카메라 앱. 사진·영상 찍기",
+      "roles": ["camera"],
+      "packages": ["com.sec.android.app.camera"]
+    },
+    {
+      "id": "playstore",
+      "name": "Play 스토어",
+      "desc": "다른 앱을 새로 깔기(설치)·업데이트·지우기 하는 앱 장터",
+      "roles": ["appstore"],
+      "packages": ["com.android.vending"]
+    },
+    {
+      "id": "kakaotalk",
+      "name": "카카오톡",
+      "desc": "카카오톡. 가족·친구에게 메시지·사진 보내기, 카톡 친구 추가, 영상 통화",
+      "roles": ["messaging"],
+      "packages": ["com.kakao.talk"]
+    },
+    {
+      "id": "kakaot",
+      "name": "카카오T",
+      "desc": "카카오T. 택시 부르기",
+      "roles": ["taxi"],
+      "packages": ["com.kakao.taxi"]
+    },
+    {
+      "id": "naver",
+      "name": "네이버",
+      "desc": "네이버 앱. 인터넷 검색, 뉴스, 블로그 글 보기",
+      "roles": ["search"],
+      "packages": ["example.naver"]
+    },
+    {
+      "id": "kakaomap",
+      "name": "카카오맵",
+      "desc": "카카오맵. 지도, 길 찾기, 근처 가게·병원 찾기",
+      "roles": ["map", "transit"],
+      "packages": ["example.kakaomap"]
+    },
+    {
+      "id": "weather",
+      "name": "날씨",
+      "desc": "날씨 앱. 오늘·내일 날씨, 비 소식, 미세먼지",
+      "roles": ["weather"],
+      "packages": ["example.weather"]
+    },
+    {
+      "id": "clock",
+      "name": "시계",
+      "desc": "시계 앱. 알람 맞추기, 타이머, 스톱워치",
+      "roles": ["clock"],
+      "packages": ["example.clock"]
+    },
+    {
+      "id": "messages",
+      "name": "메시지",
+      "desc": "문자 메시지 앱. 문자 보내기·읽기",
+      "roles": ["messaging"],
+      "packages": ["example.messages"]
+    },
+    {
+      "id": "korail",
+      "name": "코레일톡",
+      "desc": "코레일톡. KTX·기차표 예매, 승차권 확인",
+      "roles": ["train"],
+      "packages": ["example.korail"]
+    },
+    {
+      "id": "coupang",
+      "name": "쿠팡",
+      "desc": "쿠팡. 생필품·물건 주문, 배송 조회",
+      "roles": ["shopping"],
+      "packages": ["example.coupang"]
+    },
+    {
+      "id": "baemin",
+      "name": "배달의민족",
+      "desc": "배달의민족. 음식 배달 주문",
+      "roles": ["delivery"],
+      "packages": ["example.baemin"]
+    },
+    {
+      "id": "toss",
+      "name": "토스",
+      "desc": "토스. 송금, 계좌 잔액·카드 내역 보기",
+      "roles": ["bank", "pay"],
+      "packages": ["example.toss"],
+      "level": "L3"
+    },
+    {
+      "id": "nh_bank",
+      "name": "NH농협은행",
+      "desc": "NH스마트뱅킹. 농협 계좌 잔액 조회, 이체",
+      "roles": ["bank"],
+      "packages": ["example.nh_bank"],
+      "level": "L3"
+    },
+    {
+      "id": "nhis",
+      "name": "The건강보험",
+      "desc": "국민건강보험공단 앱. 건강검진 결과, 보험료, 건강보험 자격득실 확인서",
+      "roles": ["health_ins"],
+      "packages": ["example.nhis"],
+      "level": "L1"
+    },
+    {
+      "id": "nps",
+      "name": "국민연금",
+      "desc": "국민연금 앱. 내 연금 받는 날·예상 금액 보기",
+      "roles": ["pension"],
+      "packages": ["example.nps"],
+      "level": "L1"
+    },
+    {
+      "id": "ddocdoc",
+      "name": "똑닥",
+      "desc": "똑닥. 병원 진료 예약, 접수 대기",
+      "roles": ["hospital"],
+      "packages": ["example.ddocdoc"]
+    },
+    {
+      "id": "melon",
+      "name": "멜론",
+      "desc": "멜론. 노래 듣기, 음원 검색",
+      "roles": ["music"],
+      "packages": ["example.melon"]
+    },
+    {
+      "id": "calendar",
+      "name": "캘린더",
+      "desc": "달력 앱. 일정 적기, 약속·기념일 확인",
+      "roles": ["calendar"],
+      "packages": ["example.calendar"]
+    },
+    {
+      "id": "band",
+      "name": "밴드",
+      "desc": "네이버 밴드. 모임·동창회 글과 사진 올리기",
+      "roles": ["sns"],
+      "packages": ["example.band"]
+    },
+    {
+      "id": "netflix",
+      "name": "넷플릭스",
+      "desc": "넷플릭스. 드라마·영화 보기",
+      "roles": ["video"],
+      "packages": ["example.netflix"]
+    },
+    {
+      "id": "calculator",
+      "name": "계산기",
+      "desc": "계산기 앱. 더하기·빼기 계산",
+      "roles": ["calculator"],
+      "packages": ["example.calculator"]
+    },
+    {
+      "id": "daangn",
+      "name": "당근",
+      "desc": "당근마켓. 동네 중고 물건 사고팔기",
+      "roles": ["secondhand"],
+      "packages": ["example.daangn"]
+    },
+    {
+      "id": "navermap",
+      "name": "네이버 지도",
+      "desc": "네이버 지도. 길 찾기, 대중교통 경로, 근처 장소",
+      "roles": ["map", "transit"],
+      "packages": ["example.navermap"]
+    },
+    {
+      "id": "tmap",
+      "name": "티맵",
+      "desc": "티맵. 자동차 길 안내 내비게이션",
+      "roles": ["map"],
+      "packages": ["example.tmap"]
+    },
+    {
+      "id": "kakaobus",
+      "name": "카카오버스",
+      "desc": "카카오버스. 버스 도착 시간, 정류장 찾기",
+      "roles": ["transit"],
+      "packages": ["example.kakaobus"]
+    },
+    {
+      "id": "subway",
+      "name": "지하철종결자",
+      "desc": "지하철 노선도, 지하철 도착·환승 안내",
+      "roles": ["transit"],
+      "packages": ["example.subway"]
+    },
+    {
+      "id": "srt",
+      "name": "SRT",
+      "desc": "SRT 승차권 예매 (수서 출발 고속열차)",
+      "roles": ["train"],
+      "packages": ["example.srt"]
+    },
+    {
+      "id": "gmarket",
+      "name": "G마켓",
+      "desc": "G마켓. 인터넷 쇼핑, 물건 주문",
+      "roles": ["shopping"],
+      "packages": ["example.gmarket"]
+    },
+    {
+      "id": "elevenst",
+      "name": "11번가",
+      "desc": "11번가. 인터넷 쇼핑, 물건 주문",
+      "roles": ["shopping"],
+      "packages": ["example.elevenst"]
+    },
+    {
+      "id": "yogiyo",
+      "name": "요기요",
+      "desc": "요기요. 음식 배달 주문",
+      "roles": ["delivery"],
+      "packages": ["example.yogiyo"]
+    },
+    {
+      "id": "coupangeats",
+      "name": "쿠팡이츠",
+      "desc": "쿠팡이츠. 음식 배달 주문",
+      "roles": ["delivery"],
+      "packages": ["example.coupangeats"]
+    },
+    {
+      "id": "kb_bank",
+      "name": "KB스타뱅킹",
+      "desc": "KB국민은행 앱. 계좌 조회, 이체",
+      "roles": ["bank"],
+      "packages": ["example.kb_bank"],
+      "level": "L3"
+    },
+    {
+      "id": "shinhan",
+      "name": "신한 SOL",
+      "desc": "신한은행 앱. 계좌 조회, 이체",
+      "roles": ["bank"],
+      "packages": ["example.shinhan"],
+      "level": "L3"
+    },
+    {
+      "id": "woori",
+      "name": "우리WON뱅킹",
+      "desc": "우리은행 앱. 계좌 조회, 이체",
+      "roles": ["bank"],
+      "packages": ["example.woori"],
+      "level": "L3"
+    },
+    {
+      "id": "post_bank",
+      "name": "우체국뱅킹",
+      "desc": "우체국 예금 앱. 계좌 조회, 이체",
+      "roles": ["bank"],
+      "packages": ["example.post_bank"],
+      "level": "L3"
+    },
+    {
+      "id": "kakaobank",
+      "name": "카카오뱅크",
+      "desc": "카카오뱅크. 계좌 조회, 이체",
+      "roles": ["bank"],
+      "packages": ["example.kakaobank"],
+      "level": "L3"
+    },
+    {
+      "id": "kakaopay",
+      "name": "카카오페이",
+      "desc": "카카오페이. 간편 결제, 송금",
+      "roles": ["pay"],
+      "packages": ["example.kakaopay"],
+      "level": "L3"
+    },
+    {
+      "id": "naverpay",
+      "name": "네이버페이",
+      "desc": "네이버페이. 간편 결제, 포인트",
+      "roles": ["pay"],
+      "packages": ["example.naverpay"],
+      "level": "L3"
+    },
+    {
+      "id": "hometax",
+      "name": "손택스",
+      "desc": "국세청 홈택스 모바일. 연말정산, 세금 신고, 소득금액증명",
+      "roles": ["tax"],
+      "packages": ["example.hometax"],
+      "level": "L2"
+    },
+    {
+      "id": "mobile_id",
+      "name": "모바일 신분증",
+      "desc": "모바일 주민등록증·운전면허증 보여 주기",
+      "roles": ["id"],
+      "packages": ["example.mobile_id"],
+      "level": "L2"
+    },
+    {
+      "id": "genie",
+      "name": "지니뮤직",
+      "desc": "지니. 노래 듣기, 음원 검색",
+      "roles": ["music"],
+      "packages": ["example.genie"]
+    },
+    {
+      "id": "ytmusic",
+      "name": "YouTube Music",
+      "desc": "유튜브 뮤직. 노래·플레이리스트 듣기",
+      "roles": ["music"],
+      "packages": ["example.ytmusic"]
+    },
+    {
+      "id": "radio",
+      "name": "라디오",
+      "desc": "라디오 앱. KBS·MBC 라디오 듣기",
+      "roles": ["music"],
+      "packages": ["example.radio"]
+    },
+    {
+      "id": "coupangplay",
+      "name": "쿠팡플레이",
+      "desc": "쿠팡플레이. 드라마·스포츠 중계 보기",
+      "roles": ["video"],
+      "packages": ["example.coupangplay"]
+    },
+    {
+      "id": "wavve",
+      "name": "웨이브",
+      "desc": "웨이브. 지상파 드라마·예능 다시 보기",
+      "roles": ["video"],
+      "packages": ["example.wavve"]
+    },
+    {
+      "id": "tving",
+      "name": "티빙",
+      "desc": "티빙. 드라마·예능 다시 보기",
+      "roles": ["video"],
+      "packages": ["example.tving"]
+    },
+    {
+      "id": "instagram",
+      "name": "인스타그램",
+      "desc": "인스타그램. 사진·영상 올리고 보기",
+      "roles": ["sns"],
+      "packages": ["example.instagram"]
+    },
+    {
+      "id": "facebook",
+      "name": "페이스북",
+      "desc": "페이스북. 친구 소식, 글·사진 올리기",
+      "roles": ["sns"],
+      "packages": ["example.facebook"]
+    },
+    {
+      "id": "kakaostory",
+      "name": "카카오스토리",
+      "desc": "카카오스토리. 사진과 글 올리기",
+      "roles": ["sns"],
+      "packages": ["example.kakaostory"]
+    },
+    {
+      "id": "chrome",
+      "name": "크롬",
+      "desc": "인터넷 브라우저. 웹사이트 열기",
+      "roles": ["browser"],
+      "packages": ["example.chrome"]
+    },
+    {
+      "id": "memo",
+      "name": "메모",
+      "desc": "메모 앱. 적어 두기",
+      "roles": ["memo"],
+      "packages": ["example.memo"]
+    },
+    {
+      "id": "files",
+      "name": "내 파일",
+      "desc": "휴대폰에 받은 파일·문서 찾기",
+      "roles": ["files"],
+      "packages": ["example.files"]
+    }
+  ],
+  "goals": [
+    {
+      "id": "gov24.resident_copy",
+      "app": "gov24",
+      "name": "등본",
+      "desc": "주민등록표 등본 발급 (같이 사는 가족이 나오는 서류)",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.resident_abstract",
+      "app": "gov24",
+      "name": "초본",
+      "desc": "주민등록표 초본 발급 (주소가 바뀐 기록이 나오는 서류)",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.family_cert",
+      "app": "gov24",
+      "name": "가족관계증명서",
+      "desc": "가족관계증명서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.basic_cert",
+      "app": "gov24",
+      "name": "기본증명서",
+      "desc": "기본증명서 발급 (본인 출생·이름 기록)",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.marriage_cert",
+      "app": "gov24",
+      "name": "혼인관계증명서",
+      "desc": "혼인관계증명서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.health_insurance_cert",
+      "app": "gov24",
+      "name": "건강보험 자격득실",
+      "desc": "건강보험 자격득실 확인서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.seal_cert",
+      "app": "gov24",
+      "name": "인감증명서",
+      "desc": "인감증명서 발급 (본인서명사실확인서 포함)",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.move_in",
+      "app": "gov24",
+      "name": "전입신고",
+      "desc": "전입신고 (이사 후 주소 옮기기)",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.tax_cert",
+      "app": "gov24",
+      "name": "납세증명서",
+      "desc": "납세증명서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.local_tax",
+      "app": "gov24",
+      "name": "지방세",
+      "desc": "지방세(자동차세·재산세) 조회·납부",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.land_register",
+      "app": "gov24",
+      "name": "토지대장",
+      "desc": "토지대장 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.building_register",
+      "app": "gov24",
+      "name": "건축물대장",
+      "desc": "건축물대장 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.disability_cert",
+      "app": "gov24",
+      "name": "장애인증명서",
+      "desc": "장애인증명서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.driving_record",
+      "app": "gov24",
+      "name": "운전경력증명서",
+      "desc": "운전경력증명서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.vaccination",
+      "app": "gov24",
+      "name": "예방접종 증명서",
+      "desc": "예방접종 증명서 발급",
+      "level": "L2"
+    },
+    {
+      "id": "gov24.open",
+      "app": "gov24",
+      "name": "정부24 열기",
+      "desc": "정부24를 열기만 함 (할 일은 아직 말하지 않음)",
+      "level": "L1"
+    },
+    {
+      "id": "youtube.search",
+      "app": "youtube",
+      "name": "영상 찾기",
+      "desc": "유튜브에서 특정 사람·노래·영상 찾기 (검색어가 있음)",
+      "level": "L0",
+      "slots": ["query"]
+    },
+    {
+      "id": "youtube.open",
+      "app": "youtube",
+      "name": "유튜브 열기",
+      "desc": "유튜브를 열기만 하거나 아무 영상이나 틀기 (검색어 없음)",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.history",
+      "app": "youtube",
+      "name": "본 영상 다시 보기",
+      "desc": "내가 전에 본 영상 다시 찾기 (시청 기록)",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.subscriptions",
+      "app": "youtube",
+      "name": "구독 채널",
+      "desc": "구독한 채널의 새 영상 보기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.subscribe",
+      "app": "youtube",
+      "name": "채널 구독",
+      "desc": "지금 채널 구독하기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.like",
+      "app": "youtube",
+      "name": "좋아요",
+      "desc": "지금 영상에 좋아요 누르기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.shorts",
+      "app": "youtube",
+      "name": "쇼츠",
+      "desc": "짧은 영상(쇼츠) 보기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.live",
+      "app": "youtube",
+      "name": "실시간 방송",
+      "desc": "실시간 방송 보기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.playlist",
+      "app": "youtube",
+      "name": "저장한 영상",
+      "desc": "저장해 둔 영상·재생목록 보기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.comments",
+      "app": "youtube",
+      "name": "댓글",
+      "desc": "댓글 보기·쓰기",
+      "level": "L0"
+    },
+    {
+      "id": "youtube.upload",
+      "app": "youtube",
+      "name": "영상 올리기",
+      "desc": "내 영상 올리기",
+      "level": "L1"
+    },
+    {
+      "id": "contacts.add",
+      "app": "contacts",
+      "name": "연락처 저장",
+      "desc": "새 연락처(전화번호) 저장",
+      "level": "L0"
+    },
+    {
+      "id": "contacts.find",
+      "app": "contacts",
+      "name": "연락처 찾기",
+      "desc": "저장된 연락처 찾아보기",
+      "level": "L0"
+    },
+    {
+      "id": "contacts.delete",
+      "app": "contacts",
+      "name": "연락처 지우기",
+      "desc": "연락처 지우기",
+      "level": "L1"
+    },
+    {
+      "id": "contacts.edit",
+      "app": "contacts",
+      "name": "연락처 고치기",
+      "desc": "저장된 연락처의 이름·번호 고치기",
+      "level": "L0"
+    },
+    {
+      "id": "contacts.favorite",
+      "app": "contacts",
+      "name": "즐겨찾기",
+      "desc": "즐겨찾기에 넣기",
+      "level": "L0"
+    },
+    {
+      "id": "contacts.block",
+      "app": "contacts",
+      "name": "번호 차단",
+      "desc": "번호 차단하기 (전화·문자 안 받기)",
+      "level": "L1"
+    },
+    {
+      "id": "contacts.share",
+      "app": "contacts",
+      "name": "연락처 보내기",
+      "desc": "연락처를 다른 사람에게 보내기",
+      "level": "L1"
+    },
+    {
+      "id": "contacts.merge",
+      "app": "contacts",
+      "name": "연락처 합치기",
+      "desc": "겹치는 연락처 합치기",
+      "level": "L0"
+    },
+    {
+      "id": "contacts.group",
+      "app": "contacts",
+      "name": "연락처 그룹",
+      "desc": "연락처 그룹(가족·친구) 만들기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.screen_timeout",
+      "app": "settings",
+      "name": "화면 꺼짐 시간",
+      "desc": "화면이 금방 꺼지지 않게 (화면 자동 꺼짐 시간)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.brightness_up",
+      "app": "settings",
+      "name": "화면 밝게",
+      "desc": "화면을 더 밝게",
+      "level": "L0"
+    },
+    {
+      "id": "settings.brightness_down",
+      "app": "settings",
+      "name": "화면 어둡게",
+      "desc": "화면을 더 어둡게 (눈부심 줄이기)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.font_bigger",
+      "app": "settings",
+      "name": "글자 크게",
+      "desc": "글자를 크게",
+      "level": "L0"
+    },
+    {
+      "id": "settings.font_smaller",
+      "app": "settings",
+      "name": "글자 작게",
+      "desc": "글자를 작게",
+      "level": "L0"
+    },
+    {
+      "id": "settings.display_menu",
+      "app": "settings",
+      "name": "디스플레이 메뉴",
+      "desc": "디스플레이 메뉴 찾기·열기 (무엇을 바꿀지는 말하지 않음)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.wifi",
+      "app": "settings",
+      "name": "와이파이",
+      "desc": "와이파이 켜기·연결 (인터넷 연결)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.bluetooth",
+      "app": "settings",
+      "name": "블루투스",
+      "desc": "블루투스 켜기·연결 (무선 이어폰·스피커)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.volume_up",
+      "app": "settings",
+      "name": "소리 크게",
+      "desc": "소리 크게 (벨소리·미디어 음량)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.volume_down",
+      "app": "settings",
+      "name": "소리 작게",
+      "desc": "소리 작게 (벨소리·미디어 음량)",
+      "level": "L0"
+    },
+    {
+      "id": "settings.vibrate_mode",
+      "app": "settings",
+      "name": "진동 모드",
+      "desc": "진동 모드·무음 모드로 바꾸기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.ringtone",
+      "app": "settings",
+      "name": "벨소리 바꾸기",
+      "desc": "벨소리 바꾸기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.dark_mode",
+      "app": "settings",
+      "name": "다크 모드",
+      "desc": "어두운 화면 모드(다크 모드) 켜기·끄기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.airplane",
+      "app": "settings",
+      "name": "비행기 모드",
+      "desc": "비행기 모드 켜기·끄기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.location",
+      "app": "settings",
+      "name": "위치 켜기·끄기",
+      "desc": "위치(GPS) 켜기·끄기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.battery_saver",
+      "app": "settings",
+      "name": "배터리 절약",
+      "desc": "배터리 절약 모드",
+      "level": "L0"
+    },
+    {
+      "id": "settings.os_update",
+      "app": "settings",
+      "name": "휴대폰 업데이트",
+      "desc": "휴대폰 소프트웨어(시스템) 업데이트",
+      "level": "L1"
+    },
+    {
+      "id": "settings.storage",
+      "app": "settings",
+      "name": "저장 공간",
+      "desc": "저장 공간 확인·정리",
+      "level": "L0"
+    },
+    {
+      "id": "settings.apps",
+      "app": "settings",
+      "name": "앱 관리",
+      "desc": "설치된 앱 관리·지우기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.lock_screen",
+      "app": "settings",
+      "name": "화면 잠금",
+      "desc": "화면 잠금 방식·비밀번호 바꾸기",
+      "level": "L2"
+    },
+    {
+      "id": "settings.language",
+      "app": "settings",
+      "name": "언어 바꾸기",
+      "desc": "휴대폰 언어 바꾸기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.date_time",
+      "app": "settings",
+      "name": "날짜·시간",
+      "desc": "날짜·시간 맞추기",
+      "level": "L0"
+    },
+    {
+      "id": "settings.zoom",
+      "app": "settings",
+      "name": "화면 확대",
+      "desc": "화면 확대 (돋보기) 기능",
+      "level": "L0"
+    },
+    {
+      "id": "playstore.install",
+      "app": "playstore",
+      "name": "앱 설치",
+      "desc": "앱 새로 설치",
+      "level": "L2",
+      "slots": ["appName"]
+    },
+    {
+      "id": "playstore.update",
+      "app": "playstore",
+      "name": "앱 업데이트",
+      "desc": "앱 업데이트",
+      "level": "L0"
+    },
+    {
+      "id": "playstore.uninstall",
+      "app": "playstore",
+      "name": "앱 지우기",
+      "desc": "앱 지우기",
+      "level": "L1",
+      "slots": ["appName"]
+    },
+    {
+      "id": "playstore.browse",
+      "app": "playstore",
+      "name": "앱 둘러보기",
+      "desc": "어떤 앱이 있는지 둘러보기 (설치할 앱은 아직 정하지 않음)",
+      "level": "L0"
+    },
+    {
+      "id": "playstore.refund",
+      "app": "playstore",
+      "name": "앱 환불",
+      "desc": "결제한 앱 환불",
+      "level": "L3"
+    },
+    {
+      "id": "playstore.open",
+      "app": "playstore",
+      "name": "Play 스토어 열기",
+      "desc": "Play 스토어를 열기만 함",
+      "level": "L0"
+    }
+  ]
+}

@@ -30,6 +30,12 @@ variable "anthropic_model" {
   default     = "claude-sonnet-5-5"
 }
 
+variable "route_enabled" {
+  description = "jev 앱·목표 고르기 기능 스위치 (docs/jev-routing-plan.md 9장). R1 에서는 아무도 쓰지 않음"
+  type        = bool
+  default     = false
+}
+
 variable "ai_reserved_concurrency" {
   description = "ai-fn 동시 실행 상한 (LLM 비용 보호). null 이면 설정 안 함."
   type        = number

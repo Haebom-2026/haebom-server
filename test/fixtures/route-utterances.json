@@ -1,0 +1,559 @@
+[
+  {
+    "utterance": "설정에서 디스플레이 찾아 줘",
+    "apps": ["settings"],
+    "source": "real",
+    "goals": ["settings.display_menu"]
+  },
+  {
+    "utterance": "설정에 디스플레이 켜 줘",
+    "apps": ["settings"],
+    "source": "real",
+    "goals": ["settings.display_menu"]
+  },
+  {
+    "utterance": "디스플레이 금방 안 꺼지게 하고 싶어",
+    "apps": ["settings"],
+    "source": "real",
+    "goals": ["settings.screen_timeout"]
+  },
+  {
+    "utterance": "설치해 줘",
+    "apps": ["playstore"],
+    "source": "real",
+    "goals": ["playstore.install"]
+  },
+  {
+    "utterance": "박지성 찾아 줘",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "유튜브 열어 줘",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.open"]
+  },
+  {
+    "utterance": "유튜브 틀어 줘",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.open"]
+  },
+  {
+    "utterance": "유튜브에 임영웅 검색해 줘",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "유튜브에 임영웅 콘서트",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "임영웅 찾아줘",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "임영웅 콘서트 검색해 줘",
+    "apps": ["youtube", "naver"],
+    "source": "real",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "임영웅 콘서트",
+    "apps": ["youtube"],
+    "source": "real",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "연락처 등록하고 싶어",
+    "apps": ["contacts"],
+    "source": "real",
+    "goals": ["contacts.add"]
+  },
+  {
+    "utterance": "전화번호 등록하고 싶어",
+    "apps": ["contacts"],
+    "source": "real",
+    "goals": ["contacts.add"]
+  },
+  {
+    "utterance": "전화번호부 등록하고 싶어",
+    "apps": ["contacts"],
+    "source": "real",
+    "goals": ["contacts.add"]
+  },
+  {
+    "utterance": "갤러리 열어 줘",
+    "apps": ["gallery"],
+    "source": "real"
+  },
+  {
+    "utterance": "찾아 봐",
+    "apps": ["none"],
+    "source": "real"
+  },
+  {
+    "utterance": "택시 부르고 싶어",
+    "apps": ["kakaot"],
+    "source": "real"
+  },
+  {
+    "utterance": "등본 떼고 싶어",
+    "apps": ["gov24"],
+    "source": "real",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "정부 24 열어 줘",
+    "apps": ["gov24"],
+    "source": "real",
+    "goals": ["gov24.open"]
+  },
+  {
+    "utterance": "정부24 등본 떼 줘",
+    "apps": ["gov24"],
+    "source": "real",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "정부24에서 주민등록표 등본 발급 메뉴까지 가게 도와줘. 본인인증은 내가 직접 할게",
+    "apps": ["gov24"],
+    "source": "real",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "주민등록 등본 되고 싶어",
+    "apps": ["gov24"],
+    "source": "real",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "주민등록 등본 발급 받고 싶어",
+    "apps": ["gov24"],
+    "source": "real",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "등본 좀 뽑아야 되는데",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "동사무소 안 가고 등본 받을 수 있나",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.resident_copy"]
+  },
+  {
+    "utterance": "초본 떼 줘",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.resident_abstract"]
+  },
+  {
+    "utterance": "주소 바뀐 거 나오는 서류 필요해",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.resident_abstract"]
+  },
+  {
+    "utterance": "가족관계증명서 떼야 돼",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.family_cert"]
+  },
+  {
+    "utterance": "정부이십사 켜 봐",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.open"]
+  },
+  {
+    "utterance": "트로트 틀어 줘",
+    "apps": ["youtube", "melon", "genie", "ytmusic", "radio"],
+    "source": "synthetic",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "송가인 노래 듣고 싶어",
+    "apps": ["youtube", "melon", "genie", "ytmusic"],
+    "source": "synthetic",
+    "goals": ["youtube.search"]
+  },
+  {
+    "utterance": "손주가 보던 영상 보고 싶어",
+    "apps": ["youtube"],
+    "source": "synthetic",
+    "goals": ["none", "youtube.history"]
+  },
+  {
+    "utterance": "노래 좀 틀어 봐",
+    "apps": ["youtube", "melon", "genie", "ytmusic", "radio"],
+    "source": "synthetic",
+    "goals": ["youtube.open"]
+  },
+  {
+    "utterance": "아들 번호 저장해 줘",
+    "apps": ["contacts"],
+    "source": "synthetic",
+    "goals": ["contacts.add"]
+  },
+  {
+    "utterance": "새 번호 넣어 줘",
+    "apps": ["contacts"],
+    "source": "synthetic",
+    "goals": ["contacts.add"]
+  },
+  {
+    "utterance": "김철수 번호 찾아 줘",
+    "apps": ["contacts"],
+    "source": "synthetic",
+    "goals": ["contacts.find"]
+  },
+  {
+    "utterance": "이 번호 지워 줘",
+    "apps": ["contacts"],
+    "source": "synthetic",
+    "goals": ["contacts.delete"]
+  },
+  {
+    "utterance": "딸한테 전화 걸어 줘",
+    "apps": ["phone"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "아까 온 전화 누구야",
+    "apps": ["phone"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "화면이 너무 빨리 꺼져",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.screen_timeout"]
+  },
+  {
+    "utterance": "화면 좀 밝게 해 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.brightness_up"]
+  },
+  {
+    "utterance": "글씨가 너무 작아",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.font_bigger"]
+  },
+  {
+    "utterance": "글자 크게 해 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.font_bigger"]
+  },
+  {
+    "utterance": "와이파이 연결해 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.wifi"]
+  },
+  {
+    "utterance": "인터넷이 안 돼",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.wifi"]
+  },
+  {
+    "utterance": "사진 보여 줘",
+    "apps": ["gallery"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "어제 찍은 사진 어디 있어",
+    "apps": ["gallery"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "사진 찍고 싶어",
+    "apps": ["camera"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "카메라 켜 줘",
+    "apps": ["camera"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "배달의민족 깔아 줘",
+    "apps": ["playstore"],
+    "source": "synthetic",
+    "goals": ["playstore.install"]
+  },
+  {
+    "utterance": "앱 업데이트 해 줘",
+    "apps": ["playstore"],
+    "source": "synthetic",
+    "goals": ["playstore.update"]
+  },
+  {
+    "utterance": "손녀한테 카톡 보내 줘",
+    "apps": ["kakaotalk"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "카톡 친구 추가하고 싶어",
+    "apps": ["kakaotalk"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "딸이랑 영상 통화 하고 싶어",
+    "apps": ["kakaotalk"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "택시 좀 불러 줘",
+    "apps": ["kakaot"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "병원 가야 되는데 차 좀 불러 줘",
+    "apps": ["kakaot"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "오늘 날씨 어때",
+    "apps": ["weather"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "은행에 돈 보내야 돼",
+    "apps": [
+      "toss",
+      "nh_bank",
+      "kb_bank",
+      "shinhan",
+      "woori",
+      "post_bank",
+      "kakaobank",
+      "kakaopay"
+    ],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "버스 언제 와",
+    "apps": ["kakaobus", "kakaomap", "navermap", "subway"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "알람 맞춰 줘",
+    "apps": ["clock"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "손전등 켜 줘",
+    "apps": ["none"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "이거 뭐야",
+    "apps": ["none"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "도와줘",
+    "apps": ["none"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "화면 좀 어둡게 해 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.brightness_down"]
+  },
+  {
+    "utterance": "눈부셔 화면 좀 낮춰",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.brightness_down"]
+  },
+  {
+    "utterance": "글씨 좀 작게 해 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.font_smaller"]
+  },
+  {
+    "utterance": "소리 좀 키워 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.volume_up"]
+  },
+  {
+    "utterance": "벨소리가 너무 커",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.volume_down"]
+  },
+  {
+    "utterance": "진동으로 바꿔 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.vibrate_mode"]
+  },
+  {
+    "utterance": "블루투스 켜 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.bluetooth"]
+  },
+  {
+    "utterance": "비행기 모드 꺼 줘",
+    "apps": ["settings"],
+    "source": "synthetic",
+    "goals": ["settings.airplane"]
+  },
+  {
+    "utterance": "건강보험 자격득실 확인서 떼야 돼",
+    "apps": ["gov24", "nhis"],
+    "source": "synthetic",
+    "goals": ["gov24.health_insurance_cert"]
+  },
+  {
+    "utterance": "인감증명서 발급받고 싶어",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.seal_cert"]
+  },
+  {
+    "utterance": "이사했는데 전입신고 해야 돼",
+    "apps": ["gov24"],
+    "source": "synthetic",
+    "goals": ["gov24.move_in"]
+  },
+  {
+    "utterance": "아까 본 영상 다시 보고 싶어",
+    "apps": ["youtube"],
+    "source": "synthetic",
+    "goals": ["youtube.history"]
+  },
+  {
+    "utterance": "구독한 채널 영상 보여 줘",
+    "apps": ["youtube"],
+    "source": "synthetic",
+    "goals": ["youtube.subscriptions"]
+  },
+  {
+    "utterance": "이 번호 차단해 줘",
+    "apps": ["contacts", "phone"],
+    "source": "synthetic",
+    "goals": ["contacts.block"]
+  },
+  {
+    "utterance": "안 쓰는 앱 지우고 싶어",
+    "apps": ["playstore", "settings"],
+    "source": "synthetic",
+    "goals": ["playstore.uninstall", "settings.apps"]
+  },
+  {
+    "utterance": "기차표 예매하고 싶어",
+    "apps": ["korail", "srt"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "서울 가는 KTX 표 끊어 줘",
+    "apps": ["korail"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "쿠팡에서 기저귀 주문해 줘",
+    "apps": ["coupang"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "치킨 시켜 먹고 싶어",
+    "apps": ["baemin", "yogiyo", "coupangeats"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "토스로 아들한테 돈 보내 줘",
+    "apps": ["toss"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "농협 잔액 좀 봐 줘",
+    "apps": ["nh_bank"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "내일 날씨 알려 줘",
+    "apps": ["weather"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "7시에 알람 맞춰 줘",
+    "apps": ["clock"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "병원 예약하고 싶어",
+    "apps": ["ddocdoc"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "멜론에서 트로트 들려 줘",
+    "apps": ["melon"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "네이버에서 김장 담그는 법 찾아 줘",
+    "apps": ["naver"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "서울역 가는 길 좀 알려 줘",
+    "apps": ["kakaomap", "navermap", "tmap"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "밴드에 사진 올리고 싶어",
+    "apps": ["band"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "넷플릭스 드라마 보고 싶어",
+    "apps": ["netflix"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "문자 보내고 싶어",
+    "apps": ["messages"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "다음 주 병원 가는 날 달력에 적어 줘",
+    "apps": ["calendar"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "국민연금 얼마 나오는지 보고 싶어",
+    "apps": ["nps"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "계산기 켜 줘",
+    "apps": ["calculator"],
+    "source": "synthetic"
+  },
+  {
+    "utterance": "당근에서 의자 팔고 싶어",
+    "apps": ["daangn"],
+    "source": "synthetic"
+  }
+]
