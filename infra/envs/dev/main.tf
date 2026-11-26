@@ -41,3 +41,22 @@ module "debug" {
   log_retention_days       = 14
   ai_role_name             = module.stack.ai_role_name
 }
+
+# 끝난 명령의 Opus 검토 (docs/jev-routing-plan.md 7장, R3) — dev 전용, 판정만
+module "review" {
+  source = "../../modules/review"
+
+  prefix                   = "haebom-dev"
+  zip_path                 = "${path.root}/../../../dist/review.zip"
+  permissions_boundary_arn = module.stack.lambda_boundary_arn
+  environment              = module.stack.common_env
+  main_table_arn           = module.stack.main_table_arn
+  main_stream_arn          = module.stack.main_stream_arn
+  debug_table_name         = module.debug.table_name
+  debug_table_arn          = module.debug.table_arn
+  debug_bucket_name        = module.debug.bucket_name
+  debug_bucket_arn         = module.debug.bucket_arn
+  anthropic_secret_id      = module.stack.secret_ids["anthropic-api-key"]
+  anthropic_secret_arn     = module.stack.secret_arns["anthropic-api-key"]
+  log_retention_days       = 14
+}

@@ -19,5 +19,6 @@ module "http_api" {
     "POST /v1/elder/guide"                    = { function = "ai", auth = true }
     "POST /v1/elder/classify"                 = { function = "ai", auth = true }
     "POST /v1/elder/commands/{commandId}/app" = { function = "ai", auth = true }
+    "POST /v1/elder/commands/{commandId}/end" = { function = "ai", auth = true }
   }
 }

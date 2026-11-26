@@ -15,7 +15,12 @@ import { createHttpHandler } from "../../shared/handler.js";
 import { createLogger } from "../../shared/logger.js";
 import { createRouter } from "../../shared/router.js";
 import { createSecretLoader } from "../../shared/secrets.js";
-import { createChooseAppRoute, createClassifyRoute } from "./routes/classify.js";
+import { createAwsCommandLog } from "../../route/command-log.js";
+import {
+  createChooseAppRoute,
+  createClassifyRoute,
+  createEndCommandRoute,
+} from "./routes/classify.js";
 import { createGuideRoute } from "./routes/guide.js";
 
 const table = process.env.TABLE_MAIN ?? "haebom-local-main";
@@ -54,7 +59,7 @@ const classifyDeps = {
   recorder: debugStore ? createCommandTraceRecorder(debugStore, routeMap) : undefined,
 };
 
-/** ai-fn: #16 guide, #17 classify, 앱 선택. */
+/** ai-fn: #16 guide, #17 classify, 앱 선택, 끝 신호. */
 export const router = createRouter([
   {
     method: "POST",
@@ -62,6 +67,8 @@ export const router = createRouter([
     handler: createGuideRoute(claudeGuideModel, profiles, {
       recorder,
       modelName: process.env.ANTHROPIC_MODEL,
+      // 명령 단계 기록은 디버그 저장소가 있는 dev 에서만 (prod 는 개인정보 정책 뒤)
+      commandLog: recorder ? createAwsCommandLog(table) : undefined,
     }),
   },
   {
@@ -73,6 +80,11 @@ export const router = createRouter([
     method: "POST",
     path: "/v1/elder/commands/{commandId}/app",
     handler: createChooseAppRoute(profiles, classifyDeps),
+  },
+  {
+    method: "POST",
+    path: "/v1/elder/commands/{commandId}/end",
+    handler: createEndCommandRoute(profiles, { commands: classifyDeps.commands, recorder }),
   },
 ]);
 

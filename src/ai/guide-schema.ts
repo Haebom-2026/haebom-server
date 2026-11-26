@@ -8,6 +8,19 @@ import { deviceIdSchema, screenSchema } from "../debug/schema.js";
 export const GUIDE_TYPES = ["highlight", "suggest", "swipe", "ask", "say", "done"] as const;
 export const SWIPE_DIRS = ["up", "down", "left", "right"] as const;
 
+/** 앱이 보고하는 실제 행동 종류 */
+export const LAST_ACTIONS = [
+  "tap",
+  "type",
+  "swipe_up",
+  "swipe_down",
+  "swipe_left",
+  "swipe_right",
+  "back",
+  "home",
+  "other",
+] as const;
+
 export const guideRequestSchema = z.object({
   /** 앱이 붙이는 요청 번호. 그대로 돌려준다 (늦은 응답 버리기, 지침서 3.2). */
   requestId: z.number().int().nonnegative(),
@@ -24,6 +37,20 @@ export const guideRequestSchema = z.object({
   screen: screenSchema,
   /** (dev 디버그용, 선택) 디버그 뷰어 기기 ID. 이 기기 아래에 요청·판단이 기록된다. 서버 동작에는 영향 없음 */
   deviceId: deviceIdSchema.optional(),
+  /** (선택) classify 의 명령 번호. 명령 단계 기록·지도 학습에 쓴다 (docs/jev-routing-plan.md 3.6·6장) */
+  commandId: z.number().int().nonnegative().optional(),
+  /** (선택) 바로 앞 화면에서 어르신이 실제로 한 행동 (접근성 이벤트). 연결선을 실제 행동으로 만든다 */
+  lastAction: z
+    .object({
+      /** 그 화면에서 받은 안내의 stepId (안내를 따랐는지 확인). 안내 없이 한 행동이면 없음 */
+      stepId: z.string().max(40).optional(),
+      /** 명령 안의 행동 순번 (0부터). 빠진 번호가 있으면 그 구간은 학습하지 않는다 */
+      seq: z.number().int().nonnegative(),
+      action: z.enum(LAST_ACTIONS),
+      /** 누른 노드의 글자(t, 없으면 d). 서버가 가린 뒤 저장 */
+      text: z.string().max(100).default(""),
+    })
+    .optional(),
 });
 
 export type GuideRequest = z.output<typeof guideRequestSchema>;
@@ -89,4 +116,6 @@ export interface GuideResponse {
   fact?: Exclude<(typeof GUIDE_FACTS)[number], "none">;
   /** (v4) say: 홈 버튼·뒤로 버튼을 누르게 하는 안내 */
   nav?: (typeof NAV_ACTIONS)[number];
+  /** 이 안내의 id. 어르신이 따르면 앱이 다음 요청의 lastAction.stepId 로 돌려준다 */
+  stepId?: string;
 }
