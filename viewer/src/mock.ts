@@ -547,6 +547,11 @@ export const mockApi: Api = {
     ].sort((a, b) => a.screenId.localeCompare(b.screenId));
     const limit = query.limit ?? 50;
     const { since, from, to } = query;
+    // 서버 screenIdSchema 와 같은 검사 (src/debug/schema.ts): 모양이 다르면 400
+    const screenIdShape = /^\d{8}T\d{9}Z-[0-9a-f]{6}$/;
+    for (const v of [since, from, to])
+      if (v !== undefined && !screenIdShape.test(v))
+        return Promise.reject(new Error(`400 invalid screenId: ${v}`));
     if (since !== undefined)
       return delay({ items: mine.filter((s) => s.screenId > since).slice(0, limit) });
     if (from !== undefined && to !== undefined) {

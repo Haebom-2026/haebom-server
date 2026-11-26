@@ -15,13 +15,16 @@ export const POLL_MS = 1000;
  */
 export const LOOKBACK_MS = 15_000;
 
-/** screenId(`20261126T185228705Z-e1047a`)의 시각 → 그보다 ms 앞의 since 값 */
+/**
+ * screenId(`20261126T185228705Z-e1047a`)의 시각 → 그보다 ms 앞의 since 값.
+ * 서버는 since 도 screenId 모양(`…Z-6자리 hex`)만 받는다 → 가장 작은 꼬리 `-000000` 을 붙인다
+ */
 export function sinceBefore(screenId: string, ms: number): string {
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})Z/.exec(screenId);
   if (!m) return screenId;
   const [, y, mo, d, h, mi, s, ms3] = m;
   const at = Date.UTC(+y!, +mo! - 1, +d!, +h!, +mi!, +s!, +ms3!) - ms;
-  return new Date(at).toISOString().replace(/[-:.]/g, "");
+  return `${new Date(at).toISOString().replace(/[-:.]/g, "")}-000000`;
 }
 
 export interface Subscription {
