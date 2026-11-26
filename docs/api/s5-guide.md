@@ -77,7 +77,7 @@ Content-Type: application/json; charset=utf-8
 | `screen.width`, `screen.height` | ✅   | 실제 화면 크기 px (상태바·내비게이션 바 포함, `getRealSize`)                                                                                                                                                                                                                                                                                               |
 | `screen.hash`                   |      | 앱이 계산한 화면 지문. 지금은 서버가 쓰지 않습니다                                                                                                                                                                                                                                                                                                         |
 | `screen.nodes`                  | ✅   | 최대 **60개**                                                                                                                                                                                                                                                                                                                                              |
-| `deviceId`                      |      | (dev 디버그용) 디버그 뷰어에 쓰는 기기 ID. 이 기기 아래에 요청·AI 판단이 기록됩니다. 서버 응답에는 영향 없고, prod에서는 무시합니다                                                                                                                                                                                                                        |
+| `deviceId`                      |      | 기기마다 고정된 ID (8~64자 `[A-Za-z0-9_-]`, [앱 연동 안내 6장](app-integration.md#6-deviceid)). dev: 디버그 뷰어의 이 기기 아래에 기록되고, **지도 학습의 "기기 2대" 기준**이 됩니다 (없으면 그 명령은 지도에 반영 안 됨). 안내 응답에는 영향 없고, prod에서는 무시합니다                                                                                  |
 | `commandId`                     |      | (선택, R3) classify의 명령 번호. dev에서 명령 단계를 기록해 지도 학습 재료로 씁니다 ([jev 기획](../jev-routing-plan.md) 3.6·6장)                                                                                                                                                                                                                           |
 | `lastAction`                    |      | (선택, R3) 바로 앞 화면에서 어르신이 **실제로** 한 행동 `{ stepId?, seq, action, text }`. `stepId`: 그 화면에서 받은 안내의 id(따랐으면), `seq`: 명령 안 행동 순번(0부터, 빠지면 그 구간은 학습 안 함), `action`: `tap` `type` `swipe_up/down/left/right` `back` `home` `other`, `text`: 누른 요소의 글자(서버가 가림, `type`이면 넣은 값은 저장하지 않음) |
 
@@ -430,3 +430,8 @@ dev 시험 (앱 쪽이 남긴 실제 네이버지도 화면, 상황마다 2회):
 - dev에서는 검증된 지도 길이 있으면 Claude 없이 안내합니다 ([jev-routing-plan.md](../jev-routing-plan.md) 5.4). 응답 모양은 같습니다 (`highlight`·`swipe`, `status: "in_progress"`, `stepId`)
 - dev 응답에 `source: "map" | "ai"`가 붙습니다 (누가 안내했나). prod에는 붙지 않습니다
 - 지도 안내를 받으려면 `commandId`와 `lastAction`(따른 안내의 `stepId` 포함)을 꼭 보내 주세요. `stepId`가 안 돌아오면 같은 화면에서는 같은 안내를 다시 주고, 다른 화면이면 그 명령은 Claude가 이어서 안내합니다
+
+## R6 추가 (2026-11-27)
+
+- 앱 연동 흐름은 [앱 연동 안내](app-integration.md)에 한데 모았습니다 (classify → 앱 선택 → guide 반복 → 끝 신호)
+- `deviceId`는 이제 dev 지도 학습에 쓰입니다 (기기 2대 기준). guide·끝 신호에 기기마다 고정된 값을 보내 주세요
