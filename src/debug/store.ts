@@ -39,6 +39,40 @@ export interface ScreenSummary {
   guideType?: string;
   /** 화면 매칭 결과: 이미 본 어느 페이지인지 (src/cache/match.ts) */
   match?: MatchResult;
+  /**
+   * 화면이 아닌 기록: classify·앱 선택 (src/debug/command-trace.ts).
+   * 화면과 같은 시간 순 목록에 끼워 넣어 실시간 폴링으로 같이 따라온다.
+   * 이때 화면 필드(pkg·fingerprint·노드 수)는 빈 값이다
+   */
+  entry?: "command";
+  command?: CommandBrief;
+}
+
+/** 목록에 보이는 명령 요약 (원본은 CommandEntryDocument.detail) */
+export interface CommandBrief {
+  kind: "classify" | "choose";
+  commandId: number;
+  /** 가린 말 (앞 60자) */
+  utterance?: string;
+  level?: string;
+  category?: string;
+  degraded?: boolean;
+  /** jev 결과: route / ask_intent / fail / off */
+  route?: string;
+  routeReason?: string;
+  /** 후보 앱 이름 (순서대로) */
+  candidates?: string[];
+  /** 고른 앱 (앱 선택) */
+  appId?: string;
+  appName?: string;
+  goal?: string;
+}
+
+/** 명령 기록 원본 (S3) */
+export interface CommandEntryDocument extends ScreenSummary {
+  entry: "command";
+  command: CommandBrief;
+  detail: unknown;
 }
 
 /** 페이지: 같은 화면으로 판정된 화면들의 묶음 (앱별) */
@@ -81,6 +115,8 @@ export interface DebugStore {
   heartbeat(input: HeartbeatInput & { uid: string; now: Date }): Promise<void>;
   /** 같은 기기의 직전 화면과 dedupeKey 가 같으면 저장하지 않고 false. */
   saveScreen(doc: ScreenDocument & { uid: string; dedupeKey: string }): Promise<boolean>;
+  /** 명령 기록을 기기 시간 순 목록에 넣는다 (화면 수·중복 확인에는 안 셈) */
+  saveEntry(doc: CommandEntryDocument & { uid: string }): Promise<void>;
   listDevices(): Promise<DeviceRecord[]>;
   /** 기기가 없으면 false */
   setLabel(deviceId: string, label: string): Promise<boolean>;
@@ -94,7 +130,10 @@ export interface DebugStore {
       limit: number;
     },
   ): Promise<ScreenPage>;
-  getScreen(deviceId: string, screenId: string): Promise<ScreenDocument | undefined>;
+  getScreen(
+    deviceId: string,
+    screenId: string,
+  ): Promise<ScreenDocument | CommandEntryDocument | undefined>;
   createPin(pin: Omit<PinRecord, "screenCount">): Promise<PinRecord>;
   listPins(): Promise<PinRecord[]>;
   /** 앱 하나의 페이지 전부 */
@@ -111,7 +150,7 @@ export interface DebugStore {
 }
 
 /** 원본 문서에서 요약 필드만 꺼낸다 (테이블 항목·목록 응답용). */
-export function summaryOf(doc: ScreenDocument): ScreenSummary {
+export function summaryOf(doc: ScreenSummary): ScreenSummary {
   return {
     screenId: doc.screenId,
     deviceId: doc.deviceId,
@@ -126,6 +165,8 @@ export function summaryOf(doc: ScreenDocument): ScreenSummary {
     pinned: doc.pinned,
     ...(doc.guideType === undefined ? {} : { guideType: doc.guideType }),
     ...(doc.match === undefined ? {} : { match: doc.match }),
+    ...(doc.entry === undefined ? {} : { entry: doc.entry }),
+    ...(doc.command === undefined ? {} : { command: doc.command }),
   };
 }
 

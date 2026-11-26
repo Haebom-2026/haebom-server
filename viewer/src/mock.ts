@@ -5,6 +5,8 @@
  */
 import type { Api } from "./api.ts";
 import type {
+  ClassifyEntryDetail,
+  CommandEntryDocument,
   Device,
   Pin,
   ScreenDocument,
@@ -197,6 +199,274 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
   }
 }
 
+// ---------- 명령 기록 (classify·앱 선택) ----------
+const entries: CommandEntryDocument[] = [];
+const THRESHOLDS = {
+  app: 0.5,
+  role: 0.5,
+  intentMin: 0.25,
+  intentGap: 0.2,
+  goal: 0.7,
+  goalMargin: 0.3,
+  goalAskMin: 0.3,
+  exclusive: 0.9,
+  maxCandidates: 3,
+};
+const NAMES = {
+  version: "map@seed-2",
+  apps: { gov24: "정부24", youtube: "유튜브", settings: "설정", kakaotalk: "카카오톡" },
+  roles: { gov_docs: "공공 서류", video: "영상 보기", settings: "설정" },
+  goals: {
+    "gov24.resident_copy": "등본",
+    "gov24.resident_abstract": "초본",
+    "gov24.basic_cert": "기본증명서",
+  },
+};
+const GOV24 = {
+  appId: "gov24",
+  name: "정부24",
+  packages: ["kr.go.gov24"],
+  by: "jev" as const,
+  level: "L2" as const,
+};
+
+/** 예시 classify 세 가지: 목표 정함 / 목표 물음 / 해당 없음 */
+function classifyDetail(variant: number, commandId: number): ClassifyEntryDetail {
+  const base = {
+    request: { utterance: "", ruleLevel: "L0", ruleApp: "", signals: [] as string[] },
+    safety: {
+      status: "ok",
+      promptVersion: "classify@v1",
+      output: {
+        intent: "OPEN_APP",
+        app: null,
+        level: "L1",
+        category: "public",
+        reason: "공공 서류 발급",
+      },
+      inputTokens: 812,
+      outputTokens: 41,
+    },
+    saved: "created",
+    ms: 1180,
+    names: NAMES,
+  };
+  const appTrace = (top: number, none: number) => ({
+    ok: true,
+    ms: 640,
+    cost: 0.00004,
+    probs: [
+      ["gov24", top],
+      ["none", none],
+      ["settings", 0.01],
+      ["youtube", 0.005],
+    ] as [string, number][],
+    roles: [
+      ["gov_docs", top],
+      ["settings", 0.01],
+      ["video", 0.005],
+    ] as [string, number][],
+    mention: { kind: "none" as const },
+    rule: top >= 0.9 ? "exclusive" : "top_app",
+  });
+  if (variant === 2) {
+    return {
+      kind: "classify",
+      ...base,
+      request: { ...base.request, utterance: "오늘 저녁 뭐 먹지" },
+      safety: {
+        ...base.safety,
+        output: {
+          ...base.safety.output,
+          intent: "UNKNOWN",
+          level: "L0",
+          category: "none",
+          reason: "일반 대화",
+        },
+      },
+      selection: {
+        kind: "fail",
+        reason: "none",
+        mapVersion: "map@seed-2",
+        ms: 610,
+        cost: 0.00004,
+        confidence: { app: 0.08, role: 0.08 },
+      },
+      trace: {
+        masked: "오늘 저녁 뭐 먹지",
+        thresholds: THRESHOLDS,
+        app: {
+          ok: true,
+          ms: 610,
+          cost: 0.00004,
+          probs: [
+            ["none", 0.86],
+            ["youtube", 0.08],
+            ["kakaotalk", 0.04],
+          ],
+          roles: [["video", 0.08]],
+          mention: { kind: "none" },
+          rule: "none",
+        },
+        goals: [],
+      },
+      response: {
+        commandId,
+        intent: "UNKNOWN",
+        app: null,
+        sensitivity: { level: "L0", category: "none", reason: "일반 대화", signals: [] },
+      },
+    };
+  }
+  const ask = variant === 1;
+  const utterance = ask ? "서류 떼 줘" : "등본 떼 줘 010-****-****";
+  const goalProbs: [string, number][] = ask
+    ? [
+        ["gov24.resident_copy", 0.48],
+        ["gov24.resident_abstract", 0.41],
+        ["none", 0.06],
+        ["gov24.basic_cert", 0.05],
+      ]
+    : [
+        ["gov24.resident_copy", 0.91],
+        ["gov24.basic_cert", 0.05],
+        ["gov24.resident_abstract", 0.03],
+        ["none", 0.01],
+      ];
+  const candidate = ask
+    ? {
+        ...GOV24,
+        clarify: {
+          questionId: "goal:gov24",
+          say: "등본인가요, 초본인가요?",
+          options: [
+            { id: "gov24.resident_copy", name: "등본" },
+            { id: "gov24.resident_abstract", name: "초본" },
+          ],
+        },
+      }
+    : {
+        ...GOV24,
+        goal: {
+          id: "gov24.resident_copy",
+          version: 1,
+          name: "등본",
+          level: "L2" as const,
+          slots: [],
+          confidence: 0.91,
+          verified: true,
+        },
+      };
+  return {
+    kind: "classify",
+    ...base,
+    request: { ...base.request, utterance },
+    selection: {
+      kind: "route",
+      role: "gov_docs",
+      named: false,
+      exclusive: !ask,
+      ask: false,
+      candidates: [candidate],
+      confidence: { app: ask ? 0.78 : 0.97, role: ask ? 0.78 : 0.97 },
+      mapVersion: "map@seed-2",
+      ms: 1020,
+      cost: 0.00008,
+    },
+    trace: {
+      masked: utterance,
+      thresholds: THRESHOLDS,
+      app: appTrace(ask ? 0.78 : 0.97, ask ? 0.15 : 0.01),
+      goals: [
+        {
+          ok: true,
+          ms: 380,
+          cost: 0.00004,
+          appId: "gov24",
+          probs: goalProbs,
+          judged: ask ? "ask" : "goal",
+        },
+      ],
+    },
+    response: {
+      commandId,
+      intent: "OPEN_APP",
+      app: null,
+      sensitivity: { level: "L2", category: "public", reason: "공공 서류 발급", signals: [] },
+      route: { candidates: [{ appId: "gov24", name: "정부24", packages: ["kr.go.gov24"] }] },
+    },
+  };
+}
+
+let commandSeq = 100;
+function addCommand(deviceId: string, at: Date, variant: number) {
+  const commandId = commandSeq++;
+  const detail = classifyDetail(variant, commandId);
+  const sel = detail.selection;
+  const empty = {
+    pkg: "",
+    fingerprint: "",
+    fpVersion: "",
+    nodeCount: 0,
+    maskedCount: 0,
+    pinned: false,
+  };
+  entries.push({
+    ...empty,
+    screenId: screenIdAt(at),
+    deviceId,
+    receivedAt: at.toISOString(),
+    capturedAt: at.toISOString(),
+    entry: "command",
+    command: {
+      kind: "classify",
+      commandId,
+      utterance: detail.request.utterance,
+      level: detail.response.sensitivity.level,
+      category: detail.response.sensitivity.category,
+      route: sel?.kind ?? "off",
+      ...(sel?.kind === "fail" ? { routeReason: sel.reason } : {}),
+      ...(sel?.kind === "route"
+        ? {
+            candidates: sel.candidates.map((c) => c.name),
+            goal: sel.candidates[0]?.goal?.name ?? (sel.candidates[0]?.clarify ? "?" : undefined),
+          }
+        : {}),
+    } as CommandEntryDocument["command"],
+    detail,
+  });
+  if (sel?.kind === "route") {
+    const chosenAt = new Date(at.getTime() + 900);
+    entries.push({
+      ...empty,
+      screenId: screenIdAt(chosenAt),
+      deviceId,
+      receivedAt: chosenAt.toISOString(),
+      capturedAt: chosenAt.toISOString(),
+      entry: "command",
+      command: {
+        kind: "choose",
+        commandId,
+        level: "L2",
+        appId: "gov24",
+        appName: "정부24",
+        ...(variant === 0 ? { goal: "등본" } : {}),
+      },
+      detail: {
+        kind: "choose",
+        body: { appId: "gov24", installState: "installed", askedUser: false },
+        response: {
+          commandId,
+          appId: "gov24",
+          ...(variant === 0 ? { goal: { id: "gov24.resident_copy", name: "등본" } } : {}),
+          sensitivity: { level: "L2" },
+        },
+        names: NAMES,
+      },
+    });
+  }
+}
+
 // 초기 데이터
 const start = Date.now();
 devices.set("a3f9c1e2-demo-a", {
@@ -218,8 +488,10 @@ devices.set("b7d20f44-demo-b", {
   lastSeenAt: new Date(start - 2 * 3600_000).toISOString(),
   screenCount: 0,
 });
+addCommand("a3f9c1e2-demo-a", new Date(start - 8 * 7000 - 3000), 0);
 for (let step = 0; step < 8; step++)
   addScreen("a3f9c1e2-demo-a", step, new Date(start - (8 - step) * 7000));
+addCommand("a3f9c1e2-demo-a", new Date(start - 3 * 7000 + 2500), 2);
 for (let step = 0; step < 5; step++) {
   addScreen("b7d20f44-demo-b", step, new Date(start - 2 * 3600_000 - (5 - step) * 9000));
 }
@@ -231,6 +503,9 @@ if (bDevice) bDevice.lastSeenAt = new Date(start - 2 * 3600_000).toISOString();
 
 let liveStep = 8;
 setInterval(() => {
+  // 정부24 첫 화면으로 돌아올 때마다 그 앞에 명령 하나 (목표 정함·목표 물음 번갈아)
+  if (FLOW[liveStep % FLOW.length] === 0)
+    addCommand("a3f9c1e2-demo-a", new Date(Date.now() - 1500), liveStep % 2);
   addScreen("a3f9c1e2-demo-a", liveStep++, new Date());
 }, 3000);
 setInterval(() => {
@@ -259,7 +534,12 @@ export const mockApi: Api = {
     return delay(undefined);
   },
   screens: (deviceId, query = {}) => {
-    const mine = screens.filter((s) => s.deviceId === deviceId).map(summary);
+    const mine = [
+      ...screens.filter((s) => s.deviceId === deviceId).map(summary),
+      ...entries
+        .filter((e) => e.deviceId === deviceId)
+        .map(({ detail: _detail, ...rest }): ScreenSummary => rest),
+    ].sort((a, b) => a.screenId.localeCompare(b.screenId));
     const limit = query.limit ?? 50;
     const { since, from, to } = query;
     if (since !== undefined)
@@ -273,6 +553,10 @@ export const mockApi: Api = {
   },
   screen: (deviceId, screenId) => {
     const found = screens.find((s) => s.deviceId === deviceId && s.screenId === screenId);
+    return found ? delay(found) : Promise.reject(new Error("not found"));
+  },
+  entry: (deviceId, screenId) => {
+    const found = entries.find((s) => s.deviceId === deviceId && s.screenId === screenId);
     return found ? delay(found) : Promise.reject(new Error("not found"));
   },
   pin: (deviceId, from, to, name) => {

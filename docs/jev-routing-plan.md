@@ -585,7 +585,7 @@ Opus가 검토하려면 명령 하나의 안내 전체와 **마지막 화면**�
 
 - R1.2 ✅: `select()`는 그대로 두고 jev 호출을 가로채 판정 과정을 남김 (`src/route/trace.ts`: 1·2단계 원본 확률, 역할 합계, 말한 앱, 탄 규칙. `judgeApp` 결과에 `rule`). `route-eval.ts --out <파일>`로 말마다 결과·판정 과정·채점을 JSON으로 씀 (`src/route/eval-report.ts`) → 고르기 탭이 이 파일을 브라우저에서 열어 보여 줌 (서버 없이)
 - R1.3: 말 넣어 보기 `POST /v1/dev/route/try` (debug-fn이 OpenRouter 키를 읽음). dev 비밀 `haebom-dev/openrouter-api-key`에 값이 들어간 뒤
-- R2: classify 기록 (`CMD#`와 같은 키로 디버그 저장소에)
+- R2 ✅: classify·앱 선택 기록 (`src/debug/command-trace.ts`). 디버그 저장소의 기기 시간 순 목록에 화면과 같이 **명령 기록**(`entry: "command"`)으로 넣어 실시간 폴링으로 따라옴. 원본에 안전 분류 출력, jev 결과와 판정 과정(`trace`), 앱에 보낸 응답, 지도 이름표. 기기는 guide 기록과 같은 규칙(같은 uid의 최근 실제 기기 → uid 가상 기기). 뷰어: 기기 화면 목록에 `jev`·`선택` 줄 → 상세(고르기 탭과 같은 판정 그림), 화면 지도 실시간에 지금 명령 카드와 고른 앱 화면 점 강조 (목표 도착지 표시는 지도에 도착지가 생기는 R4부터)
 - R3: 명령 흐름은 guide 기록을 `commandId`로 묶어 읽음. Opus 입력·출력, 서버 확인 결과, 사람 확인 결과 저장
 - R4: guide 기록에 출처·match@v2 조건별 결과·멈춘 이유를 더함
 

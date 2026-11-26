@@ -36,6 +36,8 @@ import {
   SCREEN_TTL_SECONDS,
   epochSeconds,
   summaryOf,
+  type CommandBrief,
+  type CommandEntryDocument,
   type DebugStore,
   type DeviceRecord,
   type PageRecord,
@@ -106,6 +108,10 @@ function toSummary(item: Item): ScreenSummary {
     ...(appHash === undefined ? {} : { appHash }),
     ...(guideType === undefined ? {} : { guideType }),
     ...(match === undefined ? {} : { match }),
+    ...(item.entry === "command" ? { entry: "command" as const } : {}),
+    ...(item.command !== null && typeof item.command === "object"
+      ? { command: item.command as CommandBrief }
+      : {}),
   };
 }
 
@@ -249,6 +255,48 @@ export function createAwsDebugStore(options: AwsDebugStoreOptions): DebugStore {
       return true;
     },
 
+    async saveEntry({ uid, ...document }) {
+      const now = new Date(document.receivedAt);
+      // 기기가 없으면 만들고 마지막 신호만 갱신 (화면 수·직전 화면 키는 건드리지 않음)
+      await doc.send(
+        new UpdateCommand({
+          TableName,
+          Key: { PK: devicePk(document.deviceId), SK: "META" },
+          UpdateExpression:
+            "SET deviceId = :d, uid = :u, lastSeenAt = :now, #ttl = :ttl, screenCount = if_not_exists(screenCount, :zero)",
+          ExpressionAttributeNames: { "#ttl": "ttl" },
+          ExpressionAttributeValues: {
+            ":d": document.deviceId,
+            ":u": uid,
+            ":now": document.receivedAt,
+            ":ttl": epochSeconds(now) + DEVICE_TTL_SECONDS,
+            ":zero": 0,
+          },
+        }),
+      );
+      const s3Key = screenKey(document.deviceId, document.screenId);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket,
+          Key: s3Key,
+          Body: JSON.stringify(document),
+          ContentType: "application/json",
+        }),
+      );
+      await doc.send(
+        new PutCommand({
+          TableName,
+          Item: {
+            PK: devicePk(document.deviceId),
+            SK: screenSk(document.screenId),
+            ...summaryOf(document),
+            s3Key,
+            ttl: epochSeconds(now) + SCREEN_TTL_SECONDS,
+          },
+        }),
+      );
+    },
+
     async listDevices() {
       const items = await scanAll(doc, {
         TableName,
@@ -327,7 +375,10 @@ export function createAwsDebugStore(options: AwsDebugStoreOptions): DebugStore {
       const body = await object.Body?.transformToString("utf8");
       if (body === undefined) return undefined;
       // 원본에는 저장 시점의 pinned 가 들어 있으므로 요약 값으로 덮는다
-      return { ...(JSON.parse(body) as ScreenDocument), ...toSummary(item) };
+      return {
+        ...(JSON.parse(body) as ScreenDocument | CommandEntryDocument),
+        ...toSummary(item),
+      };
     },
 
     async createPin({ pinId, deviceId, from, to, name, createdBy, createdAt }) {

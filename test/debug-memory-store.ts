@@ -1,4 +1,5 @@
 import type {
+  CommandEntryDocument,
   DebugStore,
   DeviceRecord,
   PageRecord,
@@ -11,6 +12,10 @@ import { summaryOf } from "../src/debug/store.js";
 export function memoryDebugStore() {
   const devices = new Map<string, DeviceRecord & { lastKey?: string }>();
   const screens: (ScreenDocument & { uid: string })[] = [];
+  const entries: (CommandEntryDocument & { uid: string })[] = [];
+  /** 화면과 명령 기록을 시간(id) 순으로 */
+  const timeline = () =>
+    [...screens, ...entries].sort((a, b) => a.screenId.localeCompare(b.screenId));
   const pins: PinRecord[] = [];
   const pages: PageRecord[] = [];
 
@@ -47,6 +52,21 @@ export function memoryDebugStore() {
       screens.push(doc);
       return Promise.resolve(true);
     },
+    saveEntry(doc) {
+      const prev = devices.get(doc.deviceId);
+      devices.set(doc.deviceId, {
+        model: "",
+        os: "",
+        appVersion: "",
+        screenCount: 0,
+        ...prev,
+        deviceId: doc.deviceId,
+        uid: doc.uid,
+        lastSeenAt: doc.receivedAt,
+      });
+      entries.push(doc);
+      return Promise.resolve();
+    },
     listDevices: () => Promise.resolve([...devices.values()]),
     setLabel(deviceId, label) {
       const prev = devices.get(deviceId);
@@ -55,7 +75,9 @@ export function memoryDebugStore() {
       return Promise.resolve(true);
     },
     listScreens(deviceId, { since, from, to, limit }) {
-      const mine = screens.filter((s) => s.deviceId === deviceId).map(summaryOf);
+      const mine = timeline()
+        .filter((s) => s.deviceId === deviceId)
+        .map(summaryOf);
       const items =
         since !== undefined
           ? mine.filter((s) => s.screenId > since).slice(0, limit)
@@ -65,7 +87,7 @@ export function memoryDebugStore() {
       return Promise.resolve({ items });
     },
     getScreen: (deviceId, screenId) =>
-      Promise.resolve(screens.find((s) => s.deviceId === deviceId && s.screenId === screenId)),
+      Promise.resolve(timeline().find((s) => s.deviceId === deviceId && s.screenId === screenId)),
     createPin(pin) {
       const record = {
         ...pin,
@@ -97,5 +119,10 @@ export function memoryDebugStore() {
       return Promise.resolve();
     },
   };
-  return { store, screens, pages };
+  return {
+    entries,
+    store,
+    screens,
+    pages,
+  };
 }

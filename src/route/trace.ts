@@ -23,8 +23,13 @@ import type { ChoiceQuestion, JevClient, JevResult } from "./jev.js";
 import { goalKey, type IndexedMap } from "./map.js";
 import { createRouteSelector, type RouteSelection, type RouteSelector } from "./select.js";
 
-/** 1단계에서 탄 규칙: 후보를 낸 규칙, 실패 이유, 또는 하려는 일 물음 */
-export type AppTraceRule = AppRule | FailReason | "ask_intent";
+/**
+ * 1단계에서 탄 규칙: 후보를 낸 규칙, 실패 이유, 하려는 일 물음,
+ * 또는 하려는 일 질문의 답(역할)으로 다시 매김 (role_answer)
+ */
+export type AppTraceRule = AppRule | FailReason | "ask_intent" | "role_answer";
+
+type SelectInput = Parameters<RouteSelector["select"]>[0];
 
 export interface JevCallTrace {
   ok: boolean;
@@ -86,7 +91,7 @@ const goalIds = (appId: string, probs: [string, number][]): [string, number][] =
 
 export function buildTrace(
   m: IndexedMap,
-  input: { utterance: string; prefs?: Readonly<Record<string, string>> },
+  input: SelectInput,
   calls: readonly RecordedCall[],
 ): RouteTrace {
   const trace: RouteTrace = {
@@ -108,7 +113,9 @@ export function buildTrace(
         roles: [...roleSum.entries()].sort((a, b) => b[1] - a[1]),
         mention: findAppMention(m, input.utterance),
       };
-      if (result.ok && result.answers.app) {
+      if (result.ok && result.answers.app && input.role !== undefined) {
+        stage.rule = "role_answer";
+      } else if (result.ok && result.answers.app) {
         const judged = judgeApp(m, probs, input.utterance, input.prefs);
         const rule =
           judged.kind === "fail"
@@ -135,10 +142,7 @@ export function buildTrace(
 }
 
 export interface TracedSelector {
-  select(input: {
-    utterance: string;
-    prefs?: Readonly<Record<string, string>>;
-  }): Promise<{ selection: RouteSelection; trace: RouteTrace }>;
+  select(input: SelectInput): Promise<{ selection: RouteSelection; trace: RouteTrace }>;
 }
 
 /** select() 와 같은 고르기 + 판정 기록 */
@@ -164,3 +168,26 @@ export function createTracedSelector(deps: {
     },
   };
 }
+
+/** 판정 기록이 붙은 결과 (기록용 selector 만 붙임. 응답·명령 저장에는 들어가지 않음) */
+export type SelectionWithTrace = RouteSelection & { trace?: RouteTrace };
+
+/**
+ * select() 결과에 trace 를 붙이는 RouteSelector (dev 디버그 기록용).
+ * classify 는 응답·명령 기록을 필드별로 골라 만들므로 trace 가 밖으로 나가지 않는다.
+ */
+export function createRecordingSelector(
+  deps: Parameters<typeof createTracedSelector>[0],
+): RouteSelector {
+  const traced = createTracedSelector(deps);
+  return {
+    async select(input) {
+      const { selection, trace } = await traced.select(input);
+      const out: SelectionWithTrace = { ...selection, trace };
+      return out;
+    },
+  };
+}
+
+export const traceOf = (selection: RouteSelection | undefined): RouteTrace | undefined =>
+  (selection as SelectionWithTrace | undefined)?.trace;

@@ -1,13 +1,23 @@
 import { z } from "zod";
 import { chooseAppRequestSchema, classifyRequestSchema } from "../../../ai/classify-schema.js";
-import { chooseApp, classify, type ClassifyDeps } from "../../../ai/classify.js";
+import {
+  chooseApp,
+  classify,
+  type ClassifyDeps,
+  type ClassifyDetail,
+} from "../../../ai/classify.js";
 import type { ProfileGuard } from "../../../core/profile.js";
+import type { CommandTraceRecorder } from "../../../debug/command-trace.js";
 import { ApiError } from "../../../shared/errors.js";
 import { json } from "../../../shared/http.js";
 import type { RouteHandler } from "../../../shared/router.js";
 import { parseJsonBody } from "../../../shared/validate.js";
 
-export type ClassifyRouteDeps = Omit<ClassifyDeps, "log">;
+export type ClassifyRouteDeps = Omit<ClassifyDeps, "log" | "observe"> & {
+  /** dev 에만: classify·앱 선택을 디버그 뷰어 기기 목록에 남김 */
+  recorder?: CommandTraceRecorder | undefined;
+  now?: () => Date;
+};
 
 /**
  * #17 POST /v1/elder/classify (docs/api/s4-classify.md).
@@ -16,10 +26,29 @@ export type ClassifyRouteDeps = Omit<ClassifyDeps, "log">;
 export const createClassifyRoute =
   (profiles: ProfileGuard, deps: ClassifyRouteDeps): RouteHandler =>
   async ({ event, log }) => {
+    const receivedAt = (deps.now ?? (() => new Date()))();
     const me = await profiles.require(event, "elder");
     const request = parseJsonBody(event, classifyRequestSchema);
     const requestLog = log.child({ uid: me.uid, commandId: request.commandId });
-    return json(200, await classify(me.uid, request, { ...deps, log: requestLog }));
+    let detail: ClassifyDetail | undefined;
+    const response = await classify(me.uid, request, {
+      ...deps,
+      log: requestLog,
+      observe: deps.recorder
+        ? (d) => {
+            detail = d;
+          }
+        : undefined,
+    });
+    if (deps.recorder && detail) {
+      try {
+        await deps.recorder.classify({ uid: me.uid, receivedAt, detail });
+      } catch (error) {
+        // 디버그 기록 실패는 응답에 영향을 주지 않는다
+        requestLog.warn("classify trace save failed", { error });
+      }
+    }
+    return json(200, response);
   };
 
 const commandIdSchema = z.coerce.number().int().nonnegative();
@@ -36,5 +65,20 @@ export const createChooseAppRoute =
     if (!parsed.success) throw new ApiError("invalid-argument", "commandId 가 숫자가 아닙니다");
     const body = parseJsonBody(event, chooseAppRequestSchema);
     const requestLog = log.child({ uid: me.uid, commandId: parsed.data });
-    return json(200, await chooseApp(me.uid, parsed.data, body, { ...deps, log: requestLog }));
+    const receivedAt = (deps.now ?? (() => new Date()))();
+    const response = await chooseApp(me.uid, parsed.data, body, { ...deps, log: requestLog });
+    if (deps.recorder) {
+      try {
+        await deps.recorder.choose({
+          uid: me.uid,
+          receivedAt,
+          commandId: parsed.data,
+          body,
+          response,
+        });
+      } catch (error) {
+        requestLog.warn("choose trace save failed", { error });
+      }
+    }
+    return json(200, response);
   };
