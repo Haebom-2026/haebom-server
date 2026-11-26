@@ -6,8 +6,9 @@
 - 스택 결정 (확정)
   - 런타임: **AWS Lambda (Node.js 24, arm64) + API Gateway HTTP API + DynamoDB**
   - 언어: **TypeScript**
-  - LLM: **Claude Sonnet 5.5 (`claude-sonnet-5-5`)**, **Anthropic API 직접 호출** (Bedrock 사용 안 함, API 키는 별도 전달 예정)
+  - LLM: **Claude Sonnet 5.5 (`claude-sonnet-5-5`)**, **Anthropic API 직접 호출** (Bedrock 사용 안 함, API 키는 Secrets Manager `haebom-<env>/anthropic-api-key`)
   - IaC: **Terraform**, 이 저장소의 `infra/` 에 함께 둠
+  - AWS 계정: **`045861054142`** (서울 `ap-northeast-2`), dev·prod 같은 계정
 - 캐싱 설계: **별도 문서로 받을 예정** → 이 문서에는 끼워 넣을 자리(9장)만 잡아 둠
 
 > 지침서는 Claude Haiku를 가정했지만 이 기획은 Sonnet 5.5로 바꾼다. 응답 속도와 토큰 단가가 달라지므로 5.1의 지연·비용 메모를 따른다.
@@ -366,17 +367,17 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 
 ## 10. 개발 단계 (서버 기준)
 
-| 단계  | 내용                                                                                                                                                     | 앱 연동 시점       |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| S0    | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포 | –                  |
-| S0.5  | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
-| S1 ✅ | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
-| S2    | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency                                                                                               | 시연 SOS·정부24 L1 |
-| S3    | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
-| S4    | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
-| S5 ✅ | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |
-| S6    | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
-| S7    | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
+| 단계    | 내용                                                                                                                                                     | 앱 연동 시점       |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| S0 ✅   | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포 | –                  |
+| S0.5 ✅ | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
+| S1 ✅   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
+| S2      | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency                                                                                               | 시연 SOS·정부24 L1 |
+| S3      | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
+| S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
+| S5 ✅   | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |
+| S6      | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
+| S7      | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
 
 S1~S3은 지침서 1단계에서 앱끼리 검증한 문서 모양을 그대로 응답 스키마로 쓰므로, **앱 1단계가 끝나는 대로** 5.8 규격을 받아 확정한다.
 
@@ -626,7 +627,7 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 | #   | 내용                                                                                                                                     | 상대                  |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
 | 1   | Firestore 직접 읽기 → GET 엔드포인트(#18~#24) + FCM data 메시지로 대체                                                                   | 고령자 앱 · 보호자 앱 |
-| 2   | #13·#14·#15 경로 확정 (4.2 제안안)                                                                                                       | 보호자 앱             |
+| 2   | ~~#14·#15 경로~~ → **확정: `/v1/guardian/links`** ([S1 계약서](api/s1-users-links.md)). 남은 것: #13 승인 응답 경로 (S3)                 | 보호자 앱             |
 | 3   | 알림 읽음 처리: `readBy{uid}` → 보호자별 `readAt`                                                                                        | 보호자 앱             |
 | 4   | Firebase 프로젝트는 Auth·FCM 용도로 계속 사용 (Firestore는 1단계 테스트 전용)                                                            | 전체                  |
 | 5   | ~~서버 언어·IaC~~ → **확정: TypeScript + Terraform**                                                                                     | –                     |
@@ -635,7 +636,7 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 | 8   | 어르신별 일일 AI 호출 한도 값                                                                                                            | 전체                  |
 | 9   | 연결 해제 시 기존 알림·승인 기록 처리                                                                                                    | 보호자 앱             |
 | 10  | 캐싱 설계 반영 (9장)                                                                                                                     | 사용자 → 서버 팀      |
-| 11  | Anthropic API 키 전달 → Secrets Manager 등록 (dev/prod 키 분리 여부)                                                                     | 사용자                |
+| 11  | ~~Anthropic API 키 등록~~ → **dev 등록 완료**. 남은 것: prod 키 (dev와 분리 권장)                                                        | 사용자                |
 | 12  | ~~AWS 계정 구성~~ → **확정: dev·prod 한 계정** (이름 접두사 `haebom-<env>-`와 환경별 배포 역할·권한 경계로 분리). 남은 것: 커스텀 도메인 | 서버 팀               |
 | 13  | ~~패키지 매니저~~ → **확정: npm**                                                                                                        | 서버 팀               |
 | 14  | 디버그 뷰어용 노드 JSON 샘플 (bounds·화면 크기 포함), 디버그 모드 heartbeat·화면 전송 구현 (12장)                                        | 고령자 앱             |
