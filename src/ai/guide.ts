@@ -47,6 +47,7 @@ export const NODE_STATES = [
   "checked",
   "selected",
   "focused",
+  "secret",
 ] as const;
 export const TARGET_TEXT_MAX = 100;
 
@@ -111,7 +112,8 @@ const secretText = (node: { t?: string | undefined; d?: string | undefined }): s
  */
 export function isSecretScreen(request: GuideRequest): boolean {
   const { nodes, height } = request.screen;
-  const fields = nodes.filter((node) => node.editable === true);
+  // 앱이 secret:true 로 비워 보낸 칸은 안전하다 (글자·값 없음). 표시 없는 칸만 본다 (v4.5)
+  const fields = nodes.filter((node) => node.editable === true && node.secret !== true);
   if (fields.length === 0) return false;
   if (fields.some((field) => secretText(field) !== undefined)) return true;
 
@@ -261,13 +263,20 @@ export interface FinalizeContext {
   phones?: PhoneSlots;
   /** 앱이 알려 준 입력 상태 (slots.state, 예: "입력 중: 전화번호"). 칸 글자가 없을 때 번호 칸 판단에 씀 */
   inputState?: string;
+  /** 비밀 칸(secret:true) 요소 번호. 넣을 글자를 절대 주지 않는다 */
+  secret?: ReadonlySet<number>;
 }
 
 export function finalize(
   requestId: number,
   output: GuideModelOutput,
   nodes: NodeTexts,
-  { editable = new Set(), phones = new Map(), inputState }: FinalizeContext = {},
+  {
+    editable = new Set(),
+    phones = new Map(),
+    inputState,
+    secret = new Set(),
+  }: FinalizeContext = {},
 ): GuideResponse {
   const say = truncate(maskText(speakPhones(output.speech.trim())).text, SAY_MAX);
   const fallback: GuideResponse = { requestId, type: "say", say: FALLBACK_SAY.unsure };
@@ -304,9 +313,12 @@ export function finalize(
       const fieldText = nodes.get(output.target_id) ?? "";
       const raw = output.type_text ?? "";
       // 자리표시는 번호 칸일 때만 진짜 번호로. 칸 글자가 없으면 앱이 알려 준 입력 상태로 판단
-      const typeText = /번호\s*\d/.test(raw)
-        ? restorePhones(raw.trim(), phones, isPhoneField(fieldText || inputState))
-        : cleanList([raw], 1, CHIP_MAX)[0];
+      // 비밀 칸에는 AI 가 무엇을 내든 넣을 글자를 주지 않는다 (어르신이 직접 입력)
+      const typeText = secret.has(output.target_id)
+        ? undefined
+        : /번호\s*\d/.test(raw)
+          ? restorePhones(raw.trim(), phones, isPhoneField(fieldText || inputState))
+          : cleanList([raw], 1, CHIP_MAX)[0];
       return {
         ...base,
         type: "suggest",
@@ -392,6 +404,7 @@ export async function guide(
             request.screen.nodes.filter((n) => n.editable === true).map((n) => n.i),
           ),
           phones,
+          secret: new Set(request.screen.nodes.filter((n) => n.secret === true).map((n) => n.i)),
           ...(request.slots.state === undefined ? {} : { inputState: request.slots.state }),
         })
       : say(FALLBACK_SAY.unsure);

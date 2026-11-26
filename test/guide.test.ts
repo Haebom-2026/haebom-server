@@ -219,6 +219,29 @@ describe("finalize", () => {
     expect(typed(22, "입력 중: 이름")).not.toHaveProperty("typeText");
   });
 
+  it("비밀 칸에는 AI 가 무엇을 내든 넣을 글자를 주지 않는다", () => {
+    const result = finalize(
+      1,
+      output({
+        action: "type",
+        target_id: 13,
+        type_text: "1234",
+        speech: "그 칸은 직접 입력해 주세요.",
+      }),
+      ids,
+      { editable: new Set([13]), secret: new Set([13]) },
+    );
+    expect(result).toMatchObject({ type: "suggest", target: 13, chips: [] });
+    expect(result).not.toHaveProperty("typeText");
+    // tap 으로 가리켜도 같다
+    expect(
+      finalize(1, output({ action: "tap", target_id: 13 }), ids, {
+        editable: new Set([13]),
+        secret: new Set([13]),
+      }),
+    ).toMatchObject({ type: "suggest", chips: [] });
+  });
+
   it("type_text 가 비었거나 개인정보가 가려지면 typeText 없이 빈 chips", () => {
     for (const typeText of ["", "010-1234-5678", null]) {
       const result = finalize(1, output({ action: "type", type_text: typeText }), ids);
@@ -403,6 +426,55 @@ describe("guide", () => {
       screen.screen.nodes.push(label, { i: 21, editable: true, b: [100, 800, 900, 900] });
       expect(isSecretScreen(screen)).toBe(true);
     }
+  });
+
+  it("비밀 칸(secret:true)은 글자를 지우고, 화면은 막지 않고 모델을 부른다", async () => {
+    const login = request({
+      screen: {
+        pkg: "com.coupang.mobile",
+        width: 1000,
+        height: 2000,
+        nodes: [
+          { i: 0, t: "아이디", b: [100, 500, 400, 550] },
+          { i: 1, editable: true, b: [100, 560, 900, 660] },
+          { i: 2, t: "비밀번호", b: [100, 700, 400, 750] },
+          // 앱이 실수로 글자를 실어 보내도 서버가 받자마자 지운다
+          {
+            i: 3,
+            editable: true,
+            secret: true,
+            t: "mypass123",
+            d: "비밀번호 입력",
+            b: [100, 760, 900, 860],
+          },
+          { i: 4, t: "로그인", clickable: true, b: [100, 900, 900, 1000] },
+        ],
+      },
+    });
+    expect(login.screen.nodes[3]).toEqual({
+      i: 3,
+      editable: true,
+      secret: true,
+      b: [100, 760, 900, 860],
+    });
+    expect(isSecretScreen(login)).toBe(false);
+
+    const model = vi.fn<GuideModel>(okModel({ action: "tap", target_id: 1 }));
+    await guide(login, model, log);
+    const sent = JSON.stringify(model.mock.calls[0]?.[0]);
+    expect(sent).not.toContain("mypass123");
+    expect(model.mock.calls[0]?.[0].screen.nodes[3]).toMatchObject({
+      i: 3,
+      state: ["editable", "secret"],
+    });
+
+    // 표시가 없는 비밀번호 칸이면 지금처럼 막는다
+    const unflagged = request();
+    unflagged.screen.nodes.push(
+      { i: 20, t: "비밀번호", b: [100, 700, 400, 750] },
+      { i: 21, editable: true, b: [100, 760, 900, 860] },
+    );
+    expect(isSecretScreen(unflagged)).toBe(true);
   });
 
   it("안내 문구에만 민감 단어가 있거나 입력 칸이 없으면 막지 않는다", () => {

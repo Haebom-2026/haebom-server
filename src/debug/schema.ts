@@ -32,7 +32,20 @@ export const screenSchema = z.object({
   hash: z.string().max(128).optional(),
   width: int.positive().max(10000),
   height: int.positive().max(10000),
-  nodes: z.array(nodeSchema).max(60),
+  nodes: z
+    .array(nodeSchema)
+    .max(60)
+    // 비밀 칸(앱이 secret:true 로 표시: 비밀번호·인증번호·계좌번호 등)은 글자가 따라와도 버린다.
+    // 받은 직후 지우므로 AI·디버그 기록·로그 어디에도 남지 않는다
+    .transform((nodes) =>
+      nodes.map((node) => {
+        if (node.secret !== true) return node;
+        const cleaned = { ...node };
+        delete cleaned.t;
+        delete cleaned.d;
+        return cleaned;
+      }),
+    ),
 });
 
 export const heartbeatSchema = z.object({
