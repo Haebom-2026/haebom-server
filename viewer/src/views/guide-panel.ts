@@ -9,16 +9,41 @@ function row(label: string, ...value: (Node | string | number | null | undefined
   return [h("dt", {}, label), h("dd", {}, ...value)];
 }
 
-/** 모델 출력과 최종 응답이 다르면(서버 후처리로 낮춤 등) 무엇이 달라졌는지 */
+/** guide@v4 모델 출력(action·status)이 v3 type 으로는 무엇인지 (서버 finalize 와 같은 규칙) */
+const ACTION_TYPE: Record<string, string> = {
+  tap: "highlight",
+  type: "suggest",
+  swipe_up: "swipe",
+  swipe_down: "swipe",
+  swipe_left: "swipe",
+  swipe_right: "swipe",
+  home: "say",
+  back: "say",
+  none: "say",
+};
+
+function expectedType(out: Record<string, unknown>): unknown {
+  if (out.status === "done") return "done";
+  if (out.status === "clarify") return "ask";
+  return typeof out.action === "string" ? ACTION_TYPE[out.action] : out.type;
+}
+
+/** 모델 출력과 최종 응답이 다르면(서버 후처리로 낮춤 등) 무엇이 달라졌는지. v3·v4 출력 모두 */
 function changes(guide: GuideRecord): string[] {
   const out = guide.ai?.output;
   const res = guide.response;
   if (!out || !res) return [];
   const diff: string[] = [];
-  if (out.type !== res.type) diff.push(`type ${String(out.type)} → ${String(res.type)}`);
-  if ((out.target ?? undefined) !== res.target)
-    diff.push(`target ${String(out.target)} → ${String(res.target ?? "없음")}`);
-  if (typeof out.say === "string" && out.say.trim() !== res.say) diff.push("say 고침/자름");
+  const type = expectedType(out);
+  const target = "target_id" in out ? out.target_id : out.target;
+  const say = "speech" in out ? out.speech : out.say;
+  if (type !== res.type) diff.push(`type ${String(type)} → ${String(res.type)}`);
+  if (
+    ["highlight", "suggest", "swipe"].includes(String(res.type)) &&
+    (target ?? undefined) !== res.target
+  )
+    diff.push(`target ${String(target)} → ${String(res.target ?? "없음")}`);
+  if (typeof say === "string" && say.trim() !== res.say) diff.push("say 고침/자름");
   return diff;
 }
 

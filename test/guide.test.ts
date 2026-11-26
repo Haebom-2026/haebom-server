@@ -5,6 +5,7 @@ import {
   guide,
   isSecretScreen,
   nodeTexts,
+  todayInSeoul,
   toPromptInput,
   type GuideModel,
   type GuideModelResult,
@@ -41,12 +42,16 @@ function request(overrides: Record<string, unknown> = {}) {
 }
 
 const output = (patch: Partial<GuideModelOutput>): GuideModelOutput => ({
-  type: "highlight",
-  say: "화면 왼쪽 가운데의 카카오톡을 누르세요.",
-  target: 12,
-  chips: null,
-  dir: null,
+  plan: ["홈 화면에서 카카오톡 찾기", "카카오톡 누르기"],
+  step: "홈 화면, 카카오톡이 보임",
+  status: "in_progress",
+  action: "tap",
+  target_id: 12,
+  speech: "화면 왼쪽 가운데의 카카오톡을 누르세요.",
+  type_text: null,
   seek: null,
+  options: [],
+  fact: "none",
   ...patch,
 });
 
@@ -84,6 +89,16 @@ describe("toPromptInput", () => {
     expect(input.screen.nodes[0]).not.toHaveProperty("state");
   });
 
+  it("오늘 날짜(한국 시각)·mode·user_reply 를 넣는다", () => {
+    const { input } = toPromptInput(
+      request({ userReply: "네", mode: "solo" }),
+      new Date("2026-11-26T16:00:00.000Z"), // 한국 27일 새벽 1시
+    );
+    expect(input).toMatchObject({ today: "2026-11-27 (금)", user_reply: "네", mode: "solo" });
+    expect(todayInSeoul(new Date("2026-11-26T03:00:00.000Z"))).toBe("2026-11-26 (목)");
+    expect(toPromptInput(request()).input).toMatchObject({ user_reply: "", mode: "guide" });
+  });
+
   it("숫자 개인정보를 가린다", () => {
     const { input, masked } = toPromptInput(
       request({ utterance: "엄마한테 010-1234-5678 로 50,000원 보내 줘" }),
@@ -99,45 +114,126 @@ describe("finalize", () => {
     [12, "카카오톡"],
     [13, "유튜브"],
   ]);
+  const say = "화면 왼쪽 가운데의 카카오톡을 누르세요.";
 
-  it("화면에 있는 target 이면 그대로", () => {
+  it("tap 은 highlight, status 를 함께 보낸다", () => {
     expect(finalize(1, output({}), ids)).toEqual({
       requestId: 1,
       type: "highlight",
-      say: "화면 왼쪽 가운데의 카카오톡을 누르세요.",
+      say,
+      status: "in_progress",
       target: 12,
       targetText: "카카오톡",
     });
   });
 
   it("화면에 없는 target 이면 say 로 낮춘다", () => {
-    expect(finalize(1, output({ target: 99 }), ids)).toEqual({
+    expect(finalize(1, output({ target_id: 99 }), ids)).toEqual({
       requestId: 1,
       type: "say",
       say: FALLBACK_SAY.unsure,
     });
+    expect(finalize(1, output({ action: "type", target_id: null }), ids).say).toBe(
+      FALLBACK_SAY.unsure,
+    );
   });
 
-  it("suggest 의 chips 는 4개까지, 가려진 값은 뺀다", () => {
+  it("type 은 suggest + typeText, chips 에도 같은 글자 (v3 앱 호환)", () => {
+    expect(
+      finalize(1, output({ action: "type", target_id: 13, type_text: "화면 자동 꺼짐" }), ids),
+    ).toMatchObject({
+      type: "suggest",
+      target: 13,
+      typeText: "화면 자동 꺼짐",
+      chips: ["화면 자동 꺼짐"],
+    });
+  });
+
+  it("입력 칸(editable)을 tap 으로 가리키면 suggest 로 바꾼다", () => {
+    expect(finalize(1, output({ target_id: 13 }), ids, new Set([13]))).toMatchObject({
+      type: "suggest",
+      target: 13,
+      chips: [],
+    });
+    expect(finalize(1, output({ target_id: 12 }), ids, new Set([13])).type).toBe("highlight");
+  });
+
+  it("type_text 가 비었거나 개인정보가 가려지면 typeText 없이 빈 chips", () => {
+    for (const typeText of ["", "010-1234-5678", null]) {
+      const result = finalize(1, output({ action: "type", type_text: typeText }), ids);
+      expect(result).toMatchObject({ type: "suggest", chips: [] });
+      expect(result).not.toHaveProperty("typeText");
+    }
+  });
+
+  it("밀기는 손가락 방향 그대로 dir, 밀 영역과 seekText 를 붙인다", () => {
+    const cases = [
+      ["swipe_up", "up"],
+      ["swipe_down", "down"],
+      ["swipe_left", "left"],
+      ["swipe_right", "right"],
+    ] as const;
+    for (const [action, dir] of cases) {
+      expect(finalize(1, output({ action, target_id: null }), ids)).toMatchObject({
+        type: "swipe",
+        dir,
+      });
+    }
+    expect(
+      finalize(1, output({ action: "swipe_up", target_id: 13, seek: "디스플레이" }), ids),
+    ).toMatchObject({ type: "swipe", dir: "up", target: 13, seekText: "디스플레이" });
+  });
+
+  it("밀 영역이 화면에 없으면 target 만 빼고 밀기는 살린다", () => {
+    const result = finalize(1, output({ action: "swipe_up", target_id: 99 }), ids);
+    expect(result).toMatchObject({ type: "swipe", dir: "up" });
+    expect(result).not.toHaveProperty("target");
+  });
+
+  it("clarify 는 ask + options(4개, 가린 값 뺌) + fact", () => {
     const result = finalize(
       1,
-      output({ type: "suggest", chips: ["홍길동", "010-1234-5678", "a", "b", "c", "d"] }),
+      output({
+        status: "clarify",
+        action: "none",
+        target_id: null,
+        options: ["네, 있어요", "아니요", "010-1234-5678", "a", "b", "c"],
+        fact: "site_membership",
+      }),
       ids,
     );
-    expect(result).toMatchObject({ type: "suggest", target: 12, chips: ["홍길동", "a", "b", "c"] });
+    expect(result).toEqual({
+      requestId: 1,
+      type: "ask",
+      say,
+      status: "clarify",
+      options: ["네, 있어요", "아니요", "a", "b"],
+      fact: "site_membership",
+    });
+    const plain = finalize(1, output({ status: "clarify", action: "none", options: [] }), ids);
+    expect(plain).not.toHaveProperty("options");
+    expect(plain).not.toHaveProperty("fact");
   });
 
-  it("swipe 는 dir 이 있어야 한다", () => {
-    expect(finalize(1, output({ type: "swipe", target: null, dir: null }), ids).type).toBe("say");
-    expect(finalize(1, output({ type: "swipe", target: null, dir: "down" }), ids)).toEqual({
-      requestId: 1,
-      type: "swipe",
-      say: "화면 왼쪽 가운데의 카카오톡을 누르세요.",
-      dir: "down",
+  it("done 은 done, home·back 은 say + nav, stopped·none 은 say", () => {
+    expect(finalize(1, output({ status: "done", action: "none" }), ids)).toMatchObject({
+      type: "done",
+      status: "done",
     });
-    expect(
-      finalize(1, output({ type: "swipe", target: null, dir: "up", seek: "디스플레이" }), ids),
-    ).toMatchObject({ type: "swipe", dir: "up", seekText: "디스플레이" });
+    expect(finalize(1, output({ status: "off_track", action: "back" }), ids)).toMatchObject({
+      type: "say",
+      status: "off_track",
+      nav: "back",
+    });
+    expect(finalize(1, output({ action: "home", target_id: 12 }), ids)).not.toHaveProperty(
+      "target",
+    );
+    expect(finalize(1, output({ status: "stopped", action: "none" }), ids)).toEqual({
+      requestId: 1,
+      type: "say",
+      say,
+      status: "stopped",
+    });
   });
 
   it("targetText 는 가린 글자로, 글자가 없는 요소면 빼고 보낸다", () => {
@@ -145,16 +241,20 @@ describe("finalize", () => {
       [1, "010-1234-5678 에게 전화"],
       [2, ""],
     ]);
-    expect(finalize(1, output({ target: 1 }), nodes)).toMatchObject({
+    expect(finalize(1, output({ target_id: 1 }), nodes)).toMatchObject({
       target: 1,
       targetText: "*** 에게 전화",
     });
-    expect(finalize(1, output({ target: 2 }), nodes)).not.toHaveProperty("targetText");
+    expect(finalize(1, output({ target_id: 2 }), nodes)).not.toHaveProperty("targetText");
   });
 
-  it("say 는 60자로 자르고 쓰지 않는 필드는 빼고 보낸다", () => {
-    const result = finalize(1, output({ type: "say", say: "가".repeat(100), target: 12 }), ids);
-    expect(result.say).toHaveLength(60);
+  it("speech 는 80자로 자르고 쓰지 않는 필드는 빼고 보낸다", () => {
+    const result = finalize(
+      1,
+      output({ action: "none", speech: "가".repeat(100), target_id: 12 }),
+      ids,
+    );
+    expect(result.say).toHaveLength(80);
     expect(result).not.toHaveProperty("target");
   });
 });
@@ -190,7 +290,7 @@ describe("nodeTexts", () => {
   });
 
   it("finalize 응답의 targetText 로 이어진다", () => {
-    expect(finalize(1, output({ target: 13 }), nodeTexts(settingsRow()))).toMatchObject({
+    expect(finalize(1, output({ target_id: 13 }), nodeTexts(settingsRow()))).toMatchObject({
       target: 13,
       targetText: "Display",
     });
@@ -234,7 +334,9 @@ describe("guide", () => {
   });
 
   it("은행 앱 화면도 안내한다 (잔액·계좌번호는 가려서 보낸다)", async () => {
-    const model = vi.fn<GuideModel>(okModel({ target: 1, say: "화면 위쪽의 '조회'를 누르세요." }));
+    const model = vi.fn<GuideModel>(
+      okModel({ target_id: 1, speech: "화면 위쪽의 '조회'를 누르세요." }),
+    );
     const bank = request({
       goal: "BANK",
       utterance: "잔액 보여 줘",
