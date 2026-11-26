@@ -5,17 +5,28 @@
  * 1단계(후보 앱)·폰 고르기(가상 폰)·2단계(목표)의 정확도와 시간·비용을 낸다.
  * 돈이 드는 외부 호출이라 CI 에서는 돌리지 않는다 (말 98개 × 지도 하나 ≈ $0.01~0.02).
  *
- *   npx tsx scripts/route-eval.ts [--map seed|large|both] [--concurrency 4]
+ *   npx tsx scripts/route-eval.ts [--map seed|large|both] [--concurrency 4] [--out 결과.json]
+ *
+ * --out: 말마다 결과·판정 기록(1·2단계 확률, 탄 규칙)·채점을 JSON 으로 쓴다.
+ *        디버그 뷰어 "고르기" 탭에서 연다 (docs/jev-routing-plan.md 9.1).
  *
  * 키: 환경 변수 OPENROUTER_API_KEY 또는 ~/.config/haebom/openrouter.key (출력하지 않음).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { parseArgs } from "node:util";
-import { createJevClient } from "../src/route/jev.js";
+import {
+  EVAL_REPORT_VERSION,
+  grade,
+  mapInfo,
+  type EvalReport,
+  type EvalRun,
+} from "../src/route/eval-report.js";
+import { createJevClient, JEV_MODEL } from "../src/route/jev.js";
 import { parseMap, type IndexedMap } from "../src/route/map.js";
 import { SEED_MAP } from "../src/route/seed-map.js";
-import { createRouteSelector, type RouteSelection } from "../src/route/select.js";
+import type { RouteSelection } from "../src/route/select.js";
+import { createTracedSelector, type RouteTrace } from "../src/route/trace.js";
 
 interface Utterance {
   utterance: string;
@@ -30,6 +41,7 @@ const { values } = parseArgs({
   options: {
     map: { type: "string", default: "both" },
     concurrency: { type: "string", default: "4" },
+    out: { type: "string" },
   },
 });
 
@@ -118,21 +130,17 @@ async function pool<T, R>(
 
 const pct = (a: number, b: number) => (b === 0 ? "-" : `${((a / b) * 100).toFixed(1)}%`);
 
-async function evaluate(name: string, m: IndexedMap): Promise<void> {
+async function evaluate(name: string, m: IndexedMap): Promise<EvalRun> {
   const key = apiKey();
-  const selector = createRouteSelector({
+  const selector = createTracedSelector({
     jev: createJevClient({ apiKey: () => Promise.resolve(key) }),
     map: m,
   });
-  const results: { u: Utterance; accept: string[]; r: RouteSelection }[] = await pool(
-    utterances,
-    Number(values.concurrency),
-    async (u) => ({
-      u,
-      accept: u.apps.filter((a) => m.apps.has(a)),
-      r: await selector.select({ utterance: u.utterance }),
-    }),
-  );
+  const results: { u: Utterance; accept: string[]; r: RouteSelection; trace: RouteTrace }[] =
+    await pool(utterances, Number(values.concurrency), async (u) => {
+      const { selection, trace } = await selector.select({ utterance: u.utterance });
+      return { u, accept: u.apps.filter((a) => m.apps.has(a)), r: selection, trace };
+    });
 
   const misses: string[] = [];
   const kinds: Record<string, number> = {};
@@ -226,11 +234,38 @@ async function evaluate(name: string, m: IndexedMap): Promise<void> {
   );
   for (const line of misses) console.log(line);
   for (const [u, w] of wrongPick) console.log(`  ✗ 폰 고르기: ${u} → ${w}`);
+
+  return {
+    map: mapInfo(name, m),
+    items: results.map(({ u, accept, r, trace }) => {
+      const expect = { apps: accept, ...(u.goals ? { goals: u.goals } : {}) };
+      return {
+        utterance: u.utterance,
+        source: u.source,
+        expect,
+        selection: r,
+        trace,
+        grade: grade(m, expect, r),
+      };
+    }),
+  };
 }
 
 const which = values.map === "both" ? ["seed", "large"] : [values.map];
+const runs: EvalRun[] = [];
 for (const name of which) {
   const m = maps[name];
   if (!m) throw new Error(`--map 은 seed | large | both`);
-  await evaluate(name, m);
+  runs.push(await evaluate(name, m));
+}
+if (values.out) {
+  const report: EvalReport = {
+    kind: "route-eval",
+    version: EVAL_REPORT_VERSION,
+    createdAt: new Date().toISOString(),
+    jevModel: JEV_MODEL,
+    runs,
+  };
+  writeFileSync(values.out, `${JSON.stringify(report)}\n`);
+  console.log(`\n결과 파일: ${values.out} (디버그 뷰어 → 고르기 탭에서 열기)`);
 }

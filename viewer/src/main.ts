@@ -6,6 +6,7 @@ import { deviceView } from "./views/device.ts";
 import { devicesView } from "./views/devices.ts";
 import { mapView } from "./views/map.ts";
 import { pinsView } from "./views/pins.ts";
+import { routeView } from "./views/route.ts";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("#app missing");
@@ -18,6 +19,7 @@ const nav = h(
   h("a", { href: "#/", "data-route": "devices" }, "기기"),
   h("a", { href: "#/map", "data-route": "map" }, "화면 지도"),
   h("a", { href: "#/pins", "data-route": "pins" }, "보관 세션"),
+  h("a", { href: "#/route", "data-route": "route" }, "고르기"),
 );
 
 app.append(
@@ -44,7 +46,8 @@ function route() {
   const parts = path.split("/").filter(Boolean);
 
   for (const link of nav.querySelectorAll("a")) {
-    const section = parts[0] === "pins" || parts[0] === "map" ? parts[0] : "devices";
+    const section =
+      parts[0] === "pins" || parts[0] === "map" || parts[0] === "route" ? parts[0] : "devices";
     const active = link.dataset.route === section;
     link.classList.toggle("active", active);
   }
@@ -55,6 +58,8 @@ function route() {
     cleanup = deviceView(main, decodeURIComponent(parts[1]), from && to ? { from, to } : undefined);
   } else if (parts[0] === "map") {
     cleanup = mapView(main);
+  } else if (parts[0] === "route") {
+    cleanup = routeView(main);
   } else if (parts[0] === "pins") {
     cleanup = pinsView(main);
   } else {
