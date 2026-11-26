@@ -13,6 +13,7 @@ import { parseArgs, promisify } from "node:util";
 import { createAwsDebugStore } from "../src/debug/aws-store.js";
 import type { ScreenDocument } from "../src/debug/store.js";
 import { buildSeed } from "../src/map/seed.js";
+import { createAwsMapLearnStore, evidenceEntry } from "../src/map/learn.js";
 import { createAwsMapStore } from "../src/map/store.js";
 import { createAwsCommandLog } from "../src/route/command-log.js";
 import { createAwsCommandStore, type ScreenRef } from "../src/route/command-store.js";
@@ -105,11 +106,28 @@ async function main(): Promise<void> {
     const old = snapshot.edges.find((x) => x.edgeId === e.edgeId);
     await maps.putEdge(
       old
-        ? { ...old, status: "verified", evidence: [...new Set([...old.evidence, ...e.evidence])] }
+        ? {
+            ...old,
+            status: "verified",
+            // 사람이 승인했으니 seed 로 (자동 반영의 무효·기기 수가 내리지 않게)
+            origin: "seed",
+            evidence: [...new Set([...old.evidence, ...e.evidence])],
+            // 새로 승인한 성공이니 90일 기준을 지금으로 (오래 안 쓰여 빠졌던 연결선도 다시 쓰임)
+            lastUsedAt: new Date().toISOString(),
+          }
         : e,
     );
   }
   await maps.putGoal(result.goal);
+  // R5: 도착 화면도 사람 seed 로 남기고(자동 반영·무효가 건드리지 않게), 대기에서 뺀다
+  const learn = createAwsMapLearnStore(table);
+  await learn.putSeedArrive(
+    result.goal.goalId,
+    result.arriveFp,
+    evidenceEntry(uid, commandId, command.gen, "seed"),
+    new Date(),
+  );
+  await learn.deletePending(uid, commandId, command.gen);
   console.log(`written: ${result.edges.length} edges, goal ${result.goal.goalId}`);
 }
 

@@ -14,8 +14,17 @@ data "aws_iam_policy_document" "review" {
     resources = [var.main_stream_arn]
   }
   statement {
-    sid       = "MainTableCommands"
-    actions   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+    sid = "MainTableCommands"
+    # DeleteItem: 지도 자동 반영의 대기·반영 기록 지우기 (R5)
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:Query",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      # 도착 화면을 목표에 넣는 트랜잭션의 조건 검사 (R5)
+      "dynamodb:ConditionCheckItem",
+    ]
     resources = [var.main_table_arn]
   }
   statement {

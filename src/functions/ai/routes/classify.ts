@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MapLearnStore } from "../../../map/learn.js";
 import { chooseAppRequestSchema, classifyRequestSchema } from "../../../ai/classify-schema.js";
 import {
   chooseApp,
@@ -92,7 +93,10 @@ export const createChooseAppRoute =
 export const createEndCommandRoute =
   (
     profiles: ProfileGuard,
-    deps: Pick<ClassifyRouteDeps, "commands"> & { recorder?: GuideTraceRecorder | undefined },
+    deps: Pick<ClassifyRouteDeps, "commands"> & {
+      recorder?: GuideTraceRecorder | undefined;
+      learn?: MapLearnStore | undefined;
+    },
   ): RouteHandler =>
   async ({ event, params, log }) => {
     const me = await profiles.require(event, "elder");

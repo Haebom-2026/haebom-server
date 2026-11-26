@@ -3,6 +3,7 @@ import { claudeGuideModel } from "../../ai/guide-model.js";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createProfileGuard } from "../../core/profile.js";
 import { createAwsDebugStore } from "../../debug/aws-store.js";
+import { createAwsMapLearnStore } from "../../map/learn.js";
 import { createAwsMapStore } from "../../map/store.js";
 import { createCommandTraceRecorder } from "../../debug/command-trace.js";
 import { createGuideTraceRecorder } from "../../debug/guide-trace.js";
@@ -65,9 +66,12 @@ const classifyDeps = {
  * 지도 안내 (R4). dev 에서만: MAP_GUIDE_ENABLED=true 이고 디버그 저장소가 있을 때 (명령 단계 기록과 함께 씀).
  * 지도는 사람이 승인한 길만 (scripts/map-seed.ts).
  */
+/** (R5) 지도 안내 결과 세기·내리기. 지도 안내가 켜진 dev 에서만 */
+const mapLearn =
+  process.env.MAP_GUIDE_ENABLED === "true" && recorder ? createAwsMapLearnStore(table) : undefined;
 const mapGuide =
   process.env.MAP_GUIDE_ENABLED === "true" && recorder
-    ? { commands, maps: createAwsMapStore(table), routeMap }
+    ? { commands, maps: createAwsMapStore(table), routeMap, learn: mapLearn }
     : undefined;
 
 /** ai-fn: #16 guide, #17 classify, 앱 선택, 끝 신호. */
@@ -96,7 +100,11 @@ export const router = createRouter([
   {
     method: "POST",
     path: "/v1/elder/commands/{commandId}/end",
-    handler: createEndCommandRoute(profiles, { commands: classifyDeps.commands, recorder }),
+    handler: createEndCommandRoute(profiles, {
+      commands: classifyDeps.commands,
+      recorder,
+      learn: mapLearn,
+    }),
   },
 ]);
 

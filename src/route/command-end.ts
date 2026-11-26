@@ -13,7 +13,14 @@ import { LAST_ACTIONS } from "../ai/guide-schema.js";
 import { ApiError } from "../shared/errors.js";
 import { maskText } from "../shared/sensitive.js";
 import type { Logger } from "../shared/logger.js";
-import { END_RESULTS, type CommandStore, type EndResult, type ScreenRef } from "./command-store.js";
+import type { MapLearnStore } from "../map/learn.js";
+import {
+  END_RESULTS,
+  type CommandRecord,
+  type CommandStore,
+  type EndResult,
+  type ScreenRef,
+} from "./command-store.js";
 
 export const endCommandRequestSchema = z.object({
   result: z.enum(END_RESULTS),
@@ -50,6 +57,8 @@ export async function endCommand(
   deps: {
     commands: CommandStore;
     recorder?: GuideTraceRecorder | undefined;
+    /** (R5, dev) 지도 안내 중 포기·중단으로 끝나면 마지막 지도 안내의 실패로 센다 (8.3) */
+    learn?: MapLearnStore | undefined;
     log: Logger;
     now?: () => Date;
   },
@@ -114,6 +123,8 @@ export async function endCommand(
     return endCommand(uid, commandId, body, deps, record.gen);
   }
 
+  await countMapFailure(record, body.result, deps, now);
+
   deps.log.info("command ended", {
     commandId,
     result: body.result,
@@ -123,4 +134,30 @@ export async function endCommand(
     review: REVIEWABLE_RESULTS.includes(body.result),
   });
   return { commandId, result: body.result, finalScreenSaved: !!finalScreen };
+}
+
+/** 지도가 안내하던 중(mode map) 포기·중단으로 끝나면 마지막으로 쓴 연결선·끝 단계의 실패 (8.3). 실패는 기록만 */
+async function countMapFailure(
+  record: CommandRecord,
+  result: EndResult,
+  deps: { learn?: MapLearnStore | undefined; log: Logger },
+  now: Date,
+): Promise<void> {
+  const progress = record.mapProgress;
+  if (!deps.learn || (result !== "gave_up" && result !== "stopped_user")) return;
+  if (progress?.mode !== "map" || progress.stepId === undefined || progress.ref === undefined)
+    return;
+  const target =
+    progress.kind === "edge"
+      ? { kind: "edge" as const, id: progress.ref }
+      : record.chosenGoal
+        ? { kind: "goal" as const, id: record.chosenGoal }
+        : undefined;
+  if (!target) return;
+  try {
+    const out = await deps.learn.recordResult(target, false, now);
+    deps.log.info("map failure counted", { ...target, result, out });
+  } catch (error) {
+    deps.log.warn("map failure count failed", { error });
+  }
 }

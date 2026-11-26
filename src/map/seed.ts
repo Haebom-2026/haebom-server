@@ -10,6 +10,7 @@ import type { CommandRecord } from "../route/command-store.js";
 import { actionsOf, type ReviewAction, type ReviewRecord } from "../review/review.js";
 import { isSensitiveLabel, isSensitiveScreen } from "../review/safety-words.js";
 import { mapFingerprint } from "./fingerprint.js";
+import { evidenceEntry } from "./learn.js";
 import { classOf, exactLabel, nodeLabel } from "./guide.js";
 import { edgeIdOf, type MapEdge, type MapFinishStep, type MapGoal } from "./store.js";
 
@@ -29,7 +30,15 @@ export interface SeedInput {
 }
 
 export type SeedResult =
-  { ok: true; edges: MapEdge[]; goal: MapGoal; warnings: string[] } | { ok: false; error: string };
+  | {
+      ok: true;
+      edges: MapEdge[];
+      goal: MapGoal;
+      /** 이 명령의 도착 화면 (자동 반영이 ARRIVE 증거로 씀) */
+      arriveFp: string;
+      warnings: string[];
+    }
+  | { ok: false; error: string };
 
 const MOVE_ACTIONS = new Set(["tap", "swipe_up", "swipe_down", "swipe_left", "swipe_right"]);
 const labelOf = nodeLabel;
@@ -60,7 +69,7 @@ export function buildSeed(input: SeedInput): SeedResult {
   const bySeq = new Map(actions.map((a) => [a.seq, a]));
   const docAt = (n: number): ScreenDocument | undefined =>
     n < docs.length ? docs[n] : n === docs.length ? input.finalDoc : undefined;
-  const evidence = `${input.uid}#${command.commandId}#${command.gen}`;
+  const evidence = evidenceEntry(input.uid, command.commandId, command.gen, "seed");
   const at = input.now.toISOString();
 
   /** 행동을 한 화면에서 누른 노드의 클래스 (같은 글자가 하나일 때만) */
@@ -163,11 +172,11 @@ export function buildSeed(input: SeedInput): SeedResult {
     arriveFps: [...new Set([...(old?.arriveFps ?? []), arriveFp])],
     finish,
     status: "verified",
-    origin: old?.origin ?? "seed",
+    origin: "seed",
     evidence: [...new Set([...(old?.evidence ?? []), evidence])],
     updatedAt: at,
   };
-  return { ok: true, edges, goal, warnings };
+  return { ok: true, edges, goal, arriveFp, warnings };
 }
 
 function lastPkg(
