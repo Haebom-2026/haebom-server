@@ -577,7 +577,11 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 
 ### 12.8 뷰어 웹
 
-- 위치: 이 저장소 `viewer/` (Vite + TypeScript, 프레임워크 최소). 처음에는 **로컬 실행**(`npm run viewer`)으로 dev API를 바라본다. 팀 공유가 필요해지면 S3 + CloudFront 정적 호스팅으로 옮긴다.
+- 위치: 이 저장소 `viewer/` (Vite + TypeScript, 프레임워크 최소).
+- 접속: **dev CloudFront** `https://<배포>.cloudfront.net` (`terraform output debug`). `/*` 는 비공개 S3(OAC), `/v1/*` 는 API Gateway 로 넘겨 같은 주소에서 API 호출(CORS 불필요). 페이지는 빈 껍데기이고 데이터는 허용 이메일에만 내려간다.
+- 올리기: `npm run viewer:deploy` (빌드 → S3 업로드 → index.html 무효화). 로컬 실행은 `npm run viewer`(dev API) / `npm run viewer:mock`(가짜 데이터).
+- Firebase 웹 설정(공개 값)은 빌드에 넣지 않고 `/config.json` 에서 읽는다. Terraform 이 `firebase_web_api_key` 로 만든다 → 키가 바뀌어도 다시 빌드할 필요 없음. 로컬은 `viewer/.env.local`.
+- Firebase Auth **승인된 도메인**에 CloudFront 도메인을 추가해야 Google 로그인이 된다 (콘솔에서 수동).
 - 로그인: Firebase Auth Google 로그인 (같은 Firebase 프로젝트 → JWT Authorizer 그대로 사용).
 - 화면 4개:
   1. **기기 목록** — 라벨, 모델, OS, 앱 버전, online 점, 마지막 신호, 화면 수, 라벨 편집
@@ -587,13 +591,13 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 
 ### 12.9 구현 위치 (S0.5)
 
-| 구분   | 위치                                                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------------------ |
-| 함수   | `src/functions/debug/` (debug-fn), 라우트 `src/debug/routes.ts`, 저장 `src/debug/aws-store.ts`                     |
-| 공용   | 마스킹 `src/shared/sensitive.ts`, 화면 지문 `src/cache/fingerprint.ts` (fp@v1), 본문 검증 `src/shared/validate.ts` |
-| 인프라 | `infra/modules/debug` (테이블·버킷·함수·`ANY /v1/dev/{proxy+}` 라우트), `infra/envs/dev/main.tf` 에서만 사용       |
-| 권한   | bootstrap 의 Lambda 권한 경계·배포 역할에 `haebom-<env>-debug-*` 버킷 권한 추가 → **bootstrap 재적용 필요**        |
-| 뷰어   | `viewer/` (Vite + TypeScript, 프레임워크 없음). `npm run viewer`(dev API) / `npm run viewer:mock`(가짜 데이터)     |
+| 구분   | 위치                                                                                                                                     |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 함수   | `src/functions/debug/` (debug-fn), 라우트 `src/debug/routes.ts`, 저장 `src/debug/aws-store.ts`                                           |
+| 공용   | 마스킹 `src/shared/sensitive.ts`, 화면 지문 `src/cache/fingerprint.ts` (fp@v1), 본문 검증 `src/shared/validate.ts`                       |
+| 인프라 | `infra/modules/debug` (테이블·버킷·함수·`ANY /v1/dev/{proxy+}` 라우트), `infra/envs/dev/main.tf` 에서만 사용                             |
+| 권한   | bootstrap 의 Lambda 권한 경계·배포 역할에 `haebom-<env>-debug-*` 버킷 권한 추가 → **bootstrap 재적용 필요**                              |
+| 뷰어   | `viewer/` (Vite + TypeScript, 프레임워크 없음). 호스팅 `infra/modules/debug/viewer.tf` (S3 + CloudFront), 올리기 `npm run viewer:deploy` |
 
 ### 12.10 정할 것
 

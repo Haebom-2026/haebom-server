@@ -19,3 +19,9 @@ variable "debug_viewer_emails" {
   type        = list(string)
   default     = []
 }
+
+variable "firebase_web_api_key" {
+  description = "Firebase 웹 앱 apiKey (공개 값, 디버그 뷰어 로그인용). Firebase 콘솔 → 프로젝트 설정 → 내 앱 → 웹"
+  type        = string
+  default     = ""
+}

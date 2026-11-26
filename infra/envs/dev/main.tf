@@ -26,5 +26,8 @@ module "debug" {
   permissions_boundary_arn = module.stack.lambda_boundary_arn
   environment              = module.stack.common_env
   viewer_emails            = var.debug_viewer_emails
+  api_endpoint             = module.stack.api_endpoint
+  firebase_project_id      = var.firebase_project_id
+  firebase_web_api_key     = var.firebase_web_api_key
   log_retention_days       = 14
 }
