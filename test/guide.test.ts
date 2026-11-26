@@ -100,6 +100,28 @@ describe("toPromptInput", () => {
     expect(input.screen.nodes.at(-1)).toMatchObject({ i: 31, state: ["editable", "focused"] });
   });
 
+  it("입력 칸의 filled 는 상태로 넘기고, 비밀 칸이어도 남긴다 (내용은 지움)", () => {
+    const req = request();
+    req.screen.nodes.push(
+      { i: 40, editable: true, filled: true, t: "(입력되어 있음)" },
+      { i: 41, editable: true, secret: true, filled: true, t: "(입력되어 있음)" },
+      { i: 42, editable: true, secret: true },
+    );
+    const parsed = guideRequestSchema.parse(req);
+    expect(parsed.screen.nodes.at(-2)).toEqual({
+      i: 41,
+      editable: true,
+      secret: true,
+      filled: true,
+    });
+    const { input } = toPromptInput(parsed);
+    expect(input.screen.nodes.slice(-3)).toEqual([
+      { i: 40, t: "(입력되어 있음)", state: ["editable", "filled"] },
+      { i: 41, state: ["editable", "secret", "filled"] },
+      { i: 42, state: ["editable", "secret"] },
+    ]);
+  });
+
   it("오늘 날짜(한국 시각)·mode·user_reply 를 넣는다", () => {
     const { input } = toPromptInput(
       request({ userReply: "네", mode: "solo" }),
