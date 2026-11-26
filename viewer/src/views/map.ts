@@ -692,6 +692,7 @@ export function mapView(root: HTMLElement): () => void {
           status.textContent = `실시간 수신 실패: ${(error as Error).message}`;
           status.className = "error small";
         },
+        [...mine, ...(commandsByDevice.get(deviceId) ?? [])].map((x) => x.screenId),
       );
     }
     liveCommand = undefined;
@@ -733,7 +734,10 @@ export function mapView(root: HTMLElement): () => void {
       const deviceId = commands[0]?.deviceId ?? "";
       const prev = commandsByDevice.get(deviceId) ?? [];
       const seen = new Set(prev.map((x) => x.screenId));
-      const list = [...prev, ...commands.filter((x) => !seen.has(x.screenId))];
+      // 뒤늦게 저장된 명령도 시간 순으로
+      const list = [...prev, ...commands.filter((x) => !seen.has(x.screenId))].sort((a, b) =>
+        a.screenId.localeCompare(b.screenId),
+      );
       commandsByDevice.set(deviceId, list);
       if (deviceId === liveDevice) void loadCommand(deviceId, list);
     }
@@ -756,7 +760,11 @@ export function mapView(root: HTMLElement): () => void {
     }
     // 기다리는 사이 기기를 바꿨으면 이전 기기의 응답은 버린다
     if (disposed || items[0]?.deviceId !== liveDevice) return;
-    trail = [...trail, ...docs].slice(-TRAIL);
+    // 뒤늦게 저장된 화면(guide 기록)도 시간 순 제자리에
+    const inTrail = new Set(trail.map((d) => d.screenId));
+    trail = [...trail, ...docs.filter((d) => !inTrail.has(d.screenId))]
+      .sort((a, b) => a.screenId.localeCompare(b.screenId))
+      .slice(-TRAIL);
     if (following) selected = undefined;
     // 새 점(새 페이지)이 생길 수 있으므로 다시 배치 (기존 점 자리는 유지)
     rebuild(false);

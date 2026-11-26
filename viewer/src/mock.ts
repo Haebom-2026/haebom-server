@@ -504,8 +504,13 @@ if (bDevice) bDevice.lastSeenAt = new Date(start - 2 * 3600_000).toISOString();
 let liveStep = 8;
 setInterval(() => {
   // 정부24 첫 화면으로 돌아올 때마다 그 앞에 명령 하나 (목표 정함·목표 물음 번갈아)
-  if (FLOW[liveStep % FLOW.length] === 0)
-    addCommand("a3f9c1e2-demo-a", new Date(Date.now() - 1500), liveStep % 2);
+  // 실제 서버처럼 명령 기록은 "받은 시각"으로, 처리(1~2초)가 끝난 뒤에 저장된다:
+  // 그 사이 폰 화면이 먼저 저장되므로 뷰어 폴링이 뒤돌아 가져와야 보인다
+  if (FLOW[liveStep % FLOW.length] === 0) {
+    const receivedAt = new Date(Date.now() - 500);
+    const variant = liveStep % 2;
+    setTimeout(() => addCommand("a3f9c1e2-demo-a", receivedAt, variant), 1800);
+  }
   addScreen("a3f9c1e2-demo-a", liveStep++, new Date());
 }, 3000);
 setInterval(() => {

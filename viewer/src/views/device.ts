@@ -297,13 +297,18 @@ export function deviceView(
           deviceId,
           screens[0]?.screenId,
           (fresh) => {
-            screens = [...[...fresh].reverse(), ...screens];
+            // 뒤늦게 저장된 기록(classify·guide)은 이미 보이는 화면보다 앞 시각일 수 있다 → 제자리에
+            const have = new Set(screens.map((x) => x.screenId));
+            screens = [...screens, ...fresh.filter((x) => !have.has(x.screenId))].sort((a, b) =>
+              b.screenId.localeCompare(a.screenId),
+            );
             if (follow && screens[0]) select(screens[0].screenId);
             else renderList();
           },
           (error) => {
             status.textContent = `갱신 실패: ${(error as Error).message}`;
           },
+          screens.map((x) => x.screenId),
         );
       }
     } catch (error) {
