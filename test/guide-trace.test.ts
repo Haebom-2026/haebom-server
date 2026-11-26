@@ -40,12 +40,16 @@ const okModel: GuideModel = () =>
   Promise.resolve({
     status: "ok",
     output: {
-      type: "highlight",
-      say: "가운데의 Display 를 누르세요.",
-      target: 0,
-      chips: null,
-      dir: null,
+      plan: ["설정 열기", "디스플레이 누르기"],
+      step: "설정 첫 화면",
+      status: "in_progress",
+      action: "tap",
+      target_id: 0,
+      speech: "가운데의 Display 를 누르세요.",
+      type_text: null,
       seek: null,
+      options: [],
+      fact: "none",
     },
     usage,
     stopReason: "end_turn",
@@ -63,7 +67,7 @@ describe("guide onTrace", () => {
   it("AI 입력(마스킹·위치%)과 모델 원래 출력, 토큰을 담는다", async () => {
     const trace = await run(okModel);
     expect(trace?.status).toBe("ok");
-    expect(trace?.output).toMatchObject({ type: "highlight", target: 0 });
+    expect(trace?.output).toMatchObject({ action: "tap", target_id: 0 });
     expect(trace?.usage).toEqual(usage);
     expect(trace?.input?.utterance).not.toContain("5678");
     expect(trace?.input?.screen.nodes[0]).toMatchObject({
@@ -113,7 +117,7 @@ describe("guide trace recorder", () => {
       type: "highlight",
       target: 0,
       request: { requestId: 3, goal: "UNKNOWN", history: ["설정을 눌러 주세요."] },
-      ai: { model: "claude-sonnet-5-5", status: "ok", output: { target: 0 }, usage },
+      ai: { model: "claude-sonnet-5-5", status: "ok", output: { target_id: 0 }, usage },
       response: { type: "highlight", target: 0, targetText: "Display" },
     });
     expect(JSON.stringify(doc?.guide)).not.toContain("5678");

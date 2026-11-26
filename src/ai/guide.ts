@@ -9,9 +9,11 @@ import { maskDeep, maskText } from "../shared/sensitive.js";
 import type { Logger } from "../shared/logger.js";
 import { GUIDE_PROMPT_VERSION } from "./prompts/guide.js";
 
-export const SAY_MAX = 60;
+export const SAY_MAX = 80;
 export const CHIPS_MAX = 4;
 export const CHIP_MAX = 30;
+export const OPTIONS_MAX = 4;
+export const OPTION_MAX = 12;
 
 export const FALLBACK_SAY = {
   busy: "서버가 잠시 바빠요. 조금 뒤에 다시 말씀해 주세요.",
@@ -39,6 +41,10 @@ export interface GuidePromptInput {
   utterance: string;
   slots: Record<string, string>;
   history: string[];
+  user_reply: string;
+  mode: "guide" | "solo";
+  /** 오늘 날짜와 요일 (한국 시각), 예: "2026-11-26 (목)" */
+  today: string;
   screen: { pkg: string; nodes: PromptNode[] };
 }
 
@@ -91,7 +97,17 @@ const shortClass = (name: string | undefined): string | undefined =>
 const percent = (value: number, total: number): number =>
   Math.max(0, Math.min(100, Math.round((value / total) * 100)));
 
-export function toPromptInput(request: GuideRequest): { input: GuidePromptInput; masked: number } {
+/** 한국 시각 기준 오늘: "2026-11-26 (목)" */
+export function todayInSeoul(now: Date): string {
+  const date = now.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const weekday = now.toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul", weekday: "short" });
+  return `${date} (${weekday})`;
+}
+
+export function toPromptInput(
+  request: GuideRequest,
+  now: Date = new Date(),
+): { input: GuidePromptInput; masked: number } {
   const { width, height } = request.screen;
   const nodes: PromptNode[] = request.screen.nodes.map((node) => {
     const out: PromptNode = { i: node.i };
@@ -113,9 +129,12 @@ export function toPromptInput(request: GuideRequest): { input: GuidePromptInput;
     utterance: request.utterance,
     slots: request.slots,
     history: request.history,
+    user_reply: request.userReply,
+    mode: request.mode,
     screen: { pkg: request.screen.pkg, nodes },
   });
-  return { input: value, masked: count };
+  // today 는 마스킹하지 않는다 (날짜가 숫자 개인정보로 가려지지 않게)
+  return { input: { ...value, today: todayInSeoul(now) }, masked: count };
 }
 
 const truncate = (text: string, max: number): string =>
@@ -165,41 +184,88 @@ const cleanText = (text: string | null | undefined): string | undefined => {
   return value === "" ? undefined : value;
 };
 
-/** 모델 출력이 지금 화면과 규칙에 맞는지 확인한다. 맞지 않으면 say 로 낮춘다. */
+/** 모델 action 도 앱 응답의 dir 도 손가락을 미는 방향이다 (swipe_up = 손가락을 아래에서 위로). */
+const SWIPE_DIR = {
+  swipe_up: "up",
+  swipe_down: "down",
+  swipe_left: "left",
+  swipe_right: "right",
+} as const;
+
+const cleanList = (items: readonly string[], max: number, each: number): string[] =>
+  items
+    .map((item) => truncate(maskText(item.trim()).text, each))
+    .filter((item) => item !== "" && !item.includes("***"))
+    .slice(0, max);
+
+/**
+ * 모델 출력(guide@v4)을 앱 응답으로 바꾸고, 지금 화면과 규칙에 맞는지 확인한다.
+ * 맞지 않으면 say 로 낮춘다. type 값은 v3 와 같게 두고 v4 정보는 새 필드로 붙인다 (하위 호환).
+ */
 export function finalize(
   requestId: number,
   output: GuideModelOutput,
   nodes: NodeTexts,
+  editable: ReadonlySet<number> = new Set(),
 ): GuideResponse {
-  const say = truncate(maskText(output.say.trim()).text, SAY_MAX);
+  const say = truncate(maskText(output.speech.trim()).text, SAY_MAX);
   const fallback: GuideResponse = { requestId, type: "say", say: FALLBACK_SAY.unsure };
   if (say === "") return fallback;
+  const { status, action } = output;
+  const base = { requestId, say, status };
+  const validTarget = output.target_id !== null && nodes.has(output.target_id);
   const withTarget = (target: number) => {
     const targetText = cleanText(nodes.get(target));
     return targetText === undefined ? { target } : { target, targetText };
   };
 
-  switch (output.type) {
-    case "highlight":
-      if (output.target === null || !nodes.has(output.target)) return fallback;
-      return { requestId, type: "highlight", say, ...withTarget(output.target) };
-    case "suggest": {
-      if (output.target === null || !nodes.has(output.target)) return fallback;
-      const chips = (output.chips ?? [])
-        .map((chip) => truncate(maskText(chip.trim()).text, CHIP_MAX))
-        .filter((chip) => chip !== "" && !chip.includes("***"))
-        .slice(0, CHIPS_MAX);
-      return { requestId, type: "suggest", say, ...withTarget(output.target), chips };
+  if (status === "done") return { ...base, type: "done" };
+  if (status === "clarify") {
+    const options = cleanList(output.options, OPTIONS_MAX, OPTION_MAX);
+    const fact = output.fact === "none" ? {} : { fact: output.fact };
+    return { ...base, type: "ask", ...(options.length > 0 ? { options } : {}), ...fact };
+  }
+
+  // 입력 칸을 tap 으로 가리키면 type 으로 본다 ("이름을 써 주세요" + tap 이 dev 시험에서 나옴)
+  const effective =
+    action === "tap" && output.target_id !== null && editable.has(output.target_id)
+      ? "type"
+      : action;
+
+  switch (effective) {
+    case "tap":
+      if (!validTarget || output.target_id === null) return fallback;
+      return { ...base, type: "highlight", ...withTarget(output.target_id) };
+    case "type": {
+      if (!validTarget || output.target_id === null) return fallback;
+      const [typeText] = cleanList([output.type_text ?? ""], 1, CHIP_MAX);
+      return {
+        ...base,
+        type: "suggest",
+        ...withTarget(output.target_id),
+        chips: typeText === undefined ? [] : [typeText],
+        ...(typeText === undefined ? {} : { typeText }),
+      };
     }
-    case "swipe": {
-      if (output.dir === null) return fallback;
+    case "swipe_up":
+    case "swipe_down":
+    case "swipe_left":
+    case "swipe_right": {
       const seekText = cleanText(output.seek);
-      return { requestId, type: "swipe", say, dir: output.dir, ...(seekText ? { seekText } : {}) };
+      // 밀 영역은 화살표 자리일 뿐이라, 화면에 없는 번호면 빼고 밀기 안내는 살린다
+      return {
+        ...base,
+        type: "swipe",
+        dir: SWIPE_DIR[effective],
+        ...(validTarget && output.target_id !== null ? withTarget(output.target_id) : {}),
+        ...(seekText ? { seekText } : {}),
+      };
     }
-    case "ask":
-    case "say":
-    case "done":
-      return { requestId, type: output.type, say };
+    case "home":
+    case "back":
+      return { ...base, type: "say", nav: effective };
+    case "none":
+      return { ...base, type: "say" };
   }
 }
 
@@ -208,6 +274,7 @@ export async function guide(
   model: GuideModel,
   log: Logger,
   onTrace?: (trace: GuideTrace) => void,
+  now: Date = new Date(),
 ): Promise<GuideResponse> {
   const { requestId } = request;
   const trace: GuideTrace = { promptVersion: GUIDE_PROMPT_VERSION };
@@ -229,7 +296,7 @@ export async function guide(
     return say(FALLBACK_SAY.secret);
   }
 
-  const { input, masked } = toPromptInput(request);
+  const { input, masked } = toPromptInput(request, now);
   trace.input = input;
   trace.masked = masked;
   const started = Date.now();
@@ -252,7 +319,12 @@ export async function guide(
 
   const response =
     result.status === "ok"
-      ? finalize(requestId, result.output, nodeTexts(request))
+      ? finalize(
+          requestId,
+          result.output,
+          nodeTexts(request),
+          new Set(request.screen.nodes.filter((node) => node.editable === true).map((n) => n.i)),
+        )
       : say(FALLBACK_SAY.unsure);
   if (result.status === "ok") onTrace?.(trace);
 
@@ -265,7 +337,9 @@ export async function guide(
     status: result.status,
     stopReason: result.stopReason,
     type: response.type,
-    downgraded: result.status === "ok" && response.type !== result.output.type,
+    guideStatus: response.status,
+    action: result.status === "ok" ? result.output.action : undefined,
+    downgraded: result.status === "ok" && response.say === FALLBACK_SAY.unsure,
     latencyMs: Date.now() - started,
     ...result.usage,
   });
