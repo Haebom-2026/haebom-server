@@ -169,9 +169,9 @@ async function tryMap(
       case "resend": {
         const { stepId } = decision.response;
         if (stepId === undefined) return { info: { fp, decision: "ai", reason: "resend-broken" } };
-        // 읽은 뒤 다른 요청이 Claude 로 넘겼으면 다시 주지 않는다: 같은 값을 gen·rev 조건으로 다시 써서 확인
+        // 읽은 뒤 다른 요청이 Claude 로 넘겼으면 다시 주지 않는다: 다시 준 횟수를 gen·rev 조건으로 써서 확인
         const still = await deps.commands.update(uid, commandId, read, {
-          mapProgress: command.mapProgress ?? { mode: "map" },
+          mapProgress: { ...(command.mapProgress ?? { mode: "map" }), resends: decision.resends },
         });
         if (still !== "ok") {
           await persistAi(deps, uid, commandId, command.gen, `resend-${still}`, log);
@@ -187,7 +187,7 @@ async function tryMap(
         const stepId = newStepId();
         const response: SentResponse = { ...decision.response, stepId };
         const saved = await deps.commands.update(uid, commandId, read, {
-          mapProgress: { ...decision.progress, stepId, response: { ...response } },
+          mapProgress: { ...decision.progress, stepId },
         });
         if (saved !== "ok") {
           // 겹친 요청에 졌으면 이 요청은 Claude 가 안내하므로 Claude 로 넘긴 것을 저장

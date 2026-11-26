@@ -11,7 +11,13 @@
  */
 import { createHash } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 
 export const MAP_PK = "MAP";
 export const MAP_CACHE_MS = 60_000;
@@ -73,6 +79,20 @@ export interface MapStore {
   snapshot(): Promise<MapSnapshot>;
   putEdge(edge: MapEdge): Promise<void>;
   putGoal(goal: MapGoal): Promise<void>;
+  /**
+   * 긴급 차단에 넣기(add)·빼기(remove). 목록을 통째로 쓰지 않고 String Set 에 원자적으로 ADD·DELETE 한다
+   * (동시에 두 사람이 바꿔도, 오래된 목록을 읽었어도 다른 차단이 지워지지 않게).
+   * 켜진 ai-fn 에는 캐시 때문에 최대 1분 뒤 반영
+   */
+  updateBlock(op: "add" | "remove", ids: Partial<MapBlock>): Promise<void>;
+}
+
+/** 차단 목록 값을 문자열 배열로 (없음·콘솔에서 넣은 String Set·잘못된 값도 안전하게) */
+export function toIdList(value: unknown): string[] {
+  if (value instanceof Set || Array.isArray(value)) {
+    return [...(value as Iterable<unknown>)].filter((x): x is string => typeof x === "string");
+  }
+  return [];
 }
 
 /** 같은 이동은 같은 id: 출발·도착 지문 + 행동 + 글자 + 클래스 */
@@ -98,7 +118,7 @@ export function createAwsMapStore(
   const load = async (): Promise<MapSnapshot> => {
     const edges: MapEdge[] = [];
     const goals = new Map<string, MapGoal>();
-    let block: MapBlock = { edgeIds: [], goalIds: [] };
+    let block: Record<string, unknown> = {};
     let start: Record<string, unknown> | undefined;
     do {
       const out = await doc.send(
@@ -115,11 +135,58 @@ export function createAwsMapStore(
         else if (sk.startsWith("GOAL#")) {
           const goal = item as unknown as MapGoal;
           goals.set(goal.goalId, goal);
-        } else if (sk === "BLOCK") block = item as unknown as MapBlock;
+        } else if (sk === "BLOCK") block = item;
       }
       start = out.LastEvaluatedKey;
     } while (start !== undefined);
-    return { edges, goals, block: { edgeIds: block.edgeIds, goalIds: block.goalIds } };
+    return {
+      edges,
+      goals,
+      block: { edgeIds: toIdList(block.edgeIds), goalIds: toIdList(block.goalIds) },
+    };
+  };
+
+  /**
+   * List 로 저장된 차단 칸을 String Set 으로 바꾼다. 읽은 List 와 지금 값이 같을 때만 (그 사이 바뀌었으면
+   * 덮어쓰지 않고 실패 → 호출한 쪽이 원래 오류를 던짐). 바꿀 것이 있었으면 true
+   */
+  const migrateBlockToSets = async (): Promise<boolean> => {
+    const out = await doc.send(
+      new GetCommand({ TableName: table, Key: { PK: MAP_PK, SK: "BLOCK" }, ConsistentRead: true }),
+    );
+    const item = out.Item ?? {};
+    const sets: string[] = [];
+    const removes: string[] = [];
+    const conditions: string[] = [];
+    const values: Record<string, unknown> = {};
+    for (const key of ["edgeIds", "goalIds"] as const) {
+      const old: unknown = item[key];
+      if (!Array.isArray(old)) continue;
+      const ids = toIdList(old);
+      conditions.push(`${key} = :old_${key}`);
+      values[`:old_${key}`] = old;
+      if (ids.length === 0) removes.push(key);
+      else {
+        sets.push(`${key} = :new_${key}`);
+        values[`:new_${key}`] = new Set(ids);
+      }
+    }
+    if (conditions.length === 0) return false;
+    await doc.send(
+      new UpdateCommand({
+        TableName: table,
+        Key: { PK: MAP_PK, SK: "BLOCK" },
+        UpdateExpression: [
+          sets.length > 0 ? `SET ${sets.join(", ")}` : "",
+          removes.length > 0 ? `REMOVE ${removes.join(", ")}` : "",
+        ]
+          .filter((x) => x !== "")
+          .join(" "),
+        ConditionExpression: conditions.join(" AND "),
+        ExpressionAttributeValues: values,
+      }),
+    );
+    return true;
   };
 
   return {
@@ -140,6 +207,39 @@ export function createAwsMapStore(
           Item: { PK: MAP_PK, SK: `EDGE#${edge.edgeId}`, type: "map-edge", ...edge },
         }),
       );
+      cached = undefined;
+    },
+    async updateBlock(op, ids) {
+      const parts: string[] = [];
+      const values: Record<string, unknown> = {};
+      for (const key of ["edgeIds", "goalIds"] as const) {
+        const list = [...new Set(ids[key] ?? [])];
+        // DynamoDB 는 빈 Set 을 받지 않는다 → 바꿀 것이 있는 칸만
+        if (list.length === 0) continue;
+        parts.push(`${key} :${key}`);
+        values[`:${key}`] = new Set(list);
+      }
+      if (parts.length === 0) return;
+      const expression =
+        op === "add" ? `SET #type = :type ADD ${parts.join(", ")}` : `DELETE ${parts.join(", ")}`;
+      const apply = () =>
+        doc.send(
+          new UpdateCommand({
+            TableName: table,
+            Key: { PK: MAP_PK, SK: "BLOCK" },
+            UpdateExpression: expression,
+            ...(op === "add" ? { ExpressionAttributeNames: { "#type": "type" } } : {}),
+            ExpressionAttributeValues: op === "add" ? { ...values, ":type": "map-block" } : values,
+          }),
+        );
+      try {
+        await apply();
+      } catch (error) {
+        // 예전처럼 List 로 저장된 차단 항목(콘솔 입력 등)이면 Set 으로 바꾼 뒤 한 번 더
+        if (!(error instanceof Error && error.name === "ValidationException")) throw error;
+        if (!(await migrateBlockToSets())) throw error;
+        await apply();
+      }
       cached = undefined;
     },
     async putGoal(goal) {

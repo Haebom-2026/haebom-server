@@ -21,6 +21,7 @@ import { REVIEW_PROMPT_VERSION, type ReviewOutput } from "./prompt.js";
 import {
   hasInjectionMarker,
   isExcludedPackage,
+  isLauncher,
   isSensitiveLabel,
   isSensitiveScreen,
 } from "./safety-words.js";
@@ -119,7 +120,6 @@ const textsOf = (doc: ScreenDocument | undefined): string[] =>
 const same = (a: string, b: string) => normalizeName(a) === normalizeName(b);
 
 /** 홈 화면(런처)은 어느 앱으로 가든 지나가는 곳이라 다른 앱으로 보지 않는다 */
-const isLauncher = (pkg: string) => /launcher|home/i.test(pkg);
 
 /** 단계 기록 → 실제 행동 줄 (각 화면 다음 단계의 lastAction, 마지막은 끝 신호의 행동) */
 /**
@@ -149,8 +149,11 @@ export function stepsOfCommand(
 export function actionsOf(steps: readonly StepRecord[], command: CommandRecord): ReviewAction[] {
   const index = new Map(steps.map((s, n) => [s.stepId, n]));
   const out: ReviewAction[] = [];
+  // 같은 seq 는 처음 것만 (재시도 요청이 같은 행동을 다시 보냄: 뒤의 것을 쓰면 같은 화면 사이 행동이 됨)
+  const seenSeq = new Set<number>();
   steps.forEach((s, n) => {
-    if (n === 0 || !s.lastAction) return;
+    if (n === 0 || !s.lastAction || seenSeq.has(s.lastAction.seq)) return;
+    seenSeq.add(s.lastAction.seq);
     out.push({
       seq: s.lastAction.seq,
       on: n - 1,
