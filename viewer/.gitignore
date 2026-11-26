@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env.local
+
+# 비밀 값 없음: 예시와 목 모드 설정은 커밋한다 (루트 .gitignore 의 .env.* 예외)
+!.env.example
+!.env.mock

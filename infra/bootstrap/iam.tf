@@ -164,6 +164,31 @@ data "aws_iam_policy_document" "deploy" {
     ]
     resources = ["*"]
   }
+  # 디버그 뷰어 버킷 (docs/server-plan.md 12장). 객체 읽기·쓰기는 주지 않는다 → 배포 역할로 화면 데이터를 볼 수 없음
+  statement {
+    sid = "DebugBucket"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:ListBucketVersions",
+      "s3:DeleteObject",
+      "s3:DeleteObjectVersion",
+      "s3:Get*Configuration",
+      "s3:GetBucket*",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetEncryptionConfiguration",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:PutBucket*",
+      "s3:PutEncryptionConfiguration",
+      "s3:PutLifecycleConfiguration",
+    ]
+    resources = [
+      "arn:${local.partition}:s3:::haebom-${each.key}-debug-*",
+      "arn:${local.partition}:s3:::haebom-${each.key}-debug-*/*",
+    ]
+  }
   statement {
     sid     = "Events"
     actions = ["events:*"]

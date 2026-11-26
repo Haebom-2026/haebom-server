@@ -513,25 +513,25 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 
 ### 12.3 디버그 모드 차단 (앱·서버 이중)
 
-| 위치 | 방법                                                                                                                                                                       |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 앱   | 전송 코드를 `BuildConfig.DEBUG`(또는 dev flavor)로 감싸 **release 빌드에는 코드 경로가 없게** 한다. debug 빌드 안에서는 설정 화면의 숨은 토글로 켜고 끈다(기본 켜짐, 제안) |
-| 앱   | API 주소를 빌드 종류별로 분리: debug → dev, release → prod. release 앱이 dev 서버를 볼 일이 없게 한다                                                                      |
-| 서버 | `/v1/dev/*` 라우트는 **dev 환경에만 존재** → prod에 보내면 404                                                                                                             |
-| 서버 | 앱용 POST는 role=elder, 뷰어용 GET/PATCH는 토큰 `email` 이 **개발자 허용 목록**(환경 변수)에 있을 때만                                                                     |
+| 위치 | 방법                                                                                                                                                                                             |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 앱   | 전송 코드를 `BuildConfig.DEBUG`(또는 dev flavor)로 감싸 **release 빌드에는 코드 경로가 없게** 한다. debug 빌드 안에서는 설정 화면의 숨은 토글로 켜고 끈다(기본 켜짐, 제안)                       |
+| 앱   | API 주소를 빌드 종류별로 분리: debug → dev, release → prod. release 앱이 dev 서버를 볼 일이 없게 한다                                                                                            |
+| 서버 | `/v1/dev/*` 라우트는 **dev 환경에만 존재** → prod에 보내면 404                                                                                                                                   |
+| 서버 | 앱용 POST는 로그인만 확인 (**S1에서 users 프로필이 생기면 role=elder 로 좁힘**), 뷰어용 GET/PATCH/PUT은 토큰 `email`(`email_verified`)이 **개발자 허용 목록**(`debug_viewer_emails`)에 있을 때만 |
 
 ### 12.4 API (dev 전용, 모두 Firebase 토큰 필요)
 
-| 메서드 · 경로                                         | 호출      | 내용                                                                                                                                        |
-| ----------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST /v1/dev/heartbeat                                | 고령자 앱 | `{deviceId, model, os, appVersion}` → lastSeenAt 갱신, 처음이면 기기 등록. 응답 `204`                                                       |
-| POST /v1/dev/screens                                  | 고령자 앱 | `{deviceId, capturedAt, screen: {pkg, hash, width, height, nodes[≤60]}}` → 저장 또는 직전 hash와 같아 생략. 응답 `202`                      |
-| GET /v1/dev/devices                                   | 뷰어      | 기기 목록 + online 여부 + 마지막 화면 시각 + 화면 수                                                                                        |
-| PATCH /v1/dev/devices/{deviceId}                      | 뷰어      | `{label}` 예: "시연폰 A"                                                                                                                    |
-| GET /v1/dev/devices/{deviceId}/screens?since=&cursor= | 뷰어      | `since` 가 있으면 그 시각 이후 새 화면만(실시간 폴링용, 대부분 빈 응답), 없으면 최신순 페이지. 요약: 시각, pkg, 앱 hash, 서버 지문, 노드 수 |
-| GET /v1/dev/screens/{screenId}                        | 뷰어      | 화면 JSON 원본 (S5 이후 #16 응답 포함)                                                                                                      |
-| PUT /v1/dev/devices/{deviceId}/pins                   | 뷰어      | `{from, to, name}` 이 시간 구간의 화면을 "보관 세션"으로 표시 (예: "정부24 L2 흐름 1회차") → 30일 보관                                      |
-| GET /v1/dev/pins                                      | 뷰어      | 보관 세션 목록                                                                                                                              |
+| 메서드 · 경로                                                   | 호출      | 내용                                                                                                                                                                       |
+| --------------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST /v1/dev/heartbeat                                          | 고령자 앱 | `{deviceId, model, os, appVersion}` → lastSeenAt 갱신, 처음이면 기기 등록. 응답 `204`                                                                                      |
+| POST /v1/dev/screens                                            | 고령자 앱 | `{deviceId, capturedAt, screen: {pkg, hash, width, height, nodes[≤60]}}` → 저장 또는 직전 hash와 같아 생략. 응답 `202`                                                     |
+| GET /v1/dev/devices                                             | 뷰어      | 기기 목록 + online 여부 + 마지막 화면 시각 + 화면 수                                                                                                                       |
+| PATCH /v1/dev/devices/{deviceId}                                | 뷰어      | `{label}` 예: "시연폰 A"                                                                                                                                                   |
+| GET /v1/dev/devices/{deviceId}/screens?since=&from=&to=&cursor= | 뷰어      | `since`: 그 이후 새 화면만(실시간 폴링용, 대부분 빈 응답). `from`+`to`: 구간(보관 세션 보기). 없으면 최신순 페이지(`cursor`). 요약: 시각, pkg, 앱 hash, 서버 지문, 노드 수 |
+| GET /v1/dev/devices/{deviceId}/screens/{screenId}               | 뷰어      | 화면 JSON 원본 (S5 이후 #16 응답 포함). screenId = `20261126T070104123Z-1a2b3c` (받은 시각 + 난수, 문자열 정렬 = 시간순)                                                   |
+| PUT /v1/dev/devices/{deviceId}/pins                             | 뷰어      | `{from, to, name}` 이 시간 구간의 화면을 "보관 세션"으로 표시 (예: "정부24 L2 흐름 1회차") → 30일 보관                                                                     |
+| GET /v1/dev/pins                                                | 뷰어      | 보관 세션 목록                                                                                                                                                             |
 
 - **deviceId**: 앱이 처음 실행할 때 만드는 UUID, #4 `PUT /v1/devices/{deviceId}` 와 같은 값. 재설치로 uid가 바뀌어도 기기를 이어서 볼 수 있다(앱 저장소가 지워지면 새 기기로 보임).
 - **노드 필드**: `i`, `t` 외에 bounds(좌표)·클래스·clickable 등은 **앱 실제 샘플을 받아 확정** (14장 #14). 박스를 그리려면 bounds와 화면 크기가 꼭 있어야 한다.
@@ -585,7 +585,17 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
   3. **화면 뷰어** — 화면 크기 비율의 캔버스에 bounds 박스 + `i` 번호, 마우스를 올리면 노드 속성, 오른쪽에 노드 목록(클릭 시 박스 강조), 서버 지문·같은 화면 이력, 화면 이름 붙이기. S5 이후 LLM이 고른 target 강조 + say·지연·토큰 표시
   4. **보관 세션** — 세션 목록, 세션 안 화면을 지문별로 묶어 보기
 
-### 12.9 정할 것
+### 12.9 구현 위치 (S0.5)
+
+| 구분   | 위치                                                                                                               |
+| ------ | ------------------------------------------------------------------------------------------------------------------ |
+| 함수   | `src/functions/debug/` (debug-fn), 라우트 `src/debug/routes.ts`, 저장 `src/debug/aws-store.ts`                     |
+| 공용   | 마스킹 `src/shared/sensitive.ts`, 화면 지문 `src/cache/fingerprint.ts` (fp@v1), 본문 검증 `src/shared/validate.ts` |
+| 인프라 | `infra/modules/debug` (테이블·버킷·함수·`ANY /v1/dev/{proxy+}` 라우트), `infra/envs/dev/main.tf` 에서만 사용       |
+| 권한   | bootstrap 의 Lambda 권한 경계·배포 역할에 `haebom-<env>-debug-*` 버킷 권한 추가 → **bootstrap 재적용 필요**        |
+| 뷰어   | `viewer/` (Vite + TypeScript, 프레임워크 없음). `npm run viewer`(dev API) / `npm run viewer:mock`(가짜 데이터)     |
+
+### 12.10 정할 것
 
 - 노드 JSON 실제 샘플 (bounds 형식, 좌표계, 화면 크기 필드)
 - **스크린샷 허용 여부**: 실제 화면 위에 박스를 겹치면 추출 오류가 잘 보이지만 원칙상 화면 캡처는 받지 않는다. 허용한다면 dev 전용 플래그 + S3 presigned URL로 직접 업로드(Lambda 6MB 한도 회피) + 같은 수명

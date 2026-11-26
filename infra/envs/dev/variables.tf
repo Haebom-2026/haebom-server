@@ -13,3 +13,9 @@ variable "app_version" {
   type        = string
   default     = "local"
 }
+
+variable "debug_viewer_emails" {
+  description = "디버그 뷰어를 쓸 개발자 Google 계정 이메일 (terraform.tfvars)"
+  type        = list(string)
+  default     = []
+}

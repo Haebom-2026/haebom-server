@@ -21,6 +21,12 @@ data "aws_iam_policy_document" "lambda_boundary" {
     actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
     resources = ["arn:${local.partition}:secretsmanager:${var.region}:${local.account_id}:secret:haebom-${each.key}/*"]
   }
+  # 디버그 뷰어 버킷 (docs/server-plan.md 12장, dev 에서만 실제로 만든다)
+  statement {
+    sid       = "DebugBucketObjects"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["arn:${local.partition}:s3:::haebom-${each.key}-debug-*/*"]
+  }
 }
 
 resource "aws_iam_policy" "lambda_boundary" {

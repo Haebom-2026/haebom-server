@@ -19,3 +19,20 @@ output "function_names" {
     expire = module.expire_fn.function_name
   }
 }
+
+# 스택 밖에서 같은 API 에 라우트를 붙이는 모듈(debug)용
+output "http_api" {
+  value = {
+    id            = module.http_api.api_id
+    execution_arn = module.http_api.execution_arn
+    authorizer_id = module.http_api.authorizer_id
+  }
+}
+
+output "lambda_boundary_arn" {
+  value = local.lambda_boundary_arn
+}
+
+output "common_env" {
+  value = local.common_env
+}
