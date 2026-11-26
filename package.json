@@ -19,7 +19,8 @@
     "dev:destroy": "bash scripts/dev-deploy.sh destroy",
     "viewer": "npm --prefix viewer run dev",
     "viewer:mock": "npm --prefix viewer run mock",
-    "viewer:deploy": "bash scripts/viewer-deploy.sh"
+    "viewer:deploy": "bash scripts/viewer-deploy.sh",
+    "capture": "tsx scripts/adb-capture/index.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
