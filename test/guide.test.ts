@@ -99,6 +99,21 @@ describe("toPromptInput", () => {
     expect(toPromptInput(request()).input).toMatchObject({ user_reply: "", mode: "guide" });
   });
 
+  it("어르신이 말한 번호는 [번호N] 으로 보내고, 화면의 번호는 *** 로 가린다", () => {
+    const req = request({
+      utterance: "김민정 추가해 줘 / 010-1234-5678",
+      slots: { answer: "010-1234-5678", state: "입력 중: 전화번호" },
+    });
+    req.screen.nodes.push({ i: 30, t: "최근 통화 010-9999-8888" });
+    const { input, phones } = toPromptInput(req);
+    const sent = JSON.stringify(input);
+    expect(input.utterance).toBe("김민정 추가해 줘 / [번호1]");
+    expect(input.slots).toMatchObject({ answer: "[번호1]" });
+    expect(sent).not.toContain("1234");
+    expect(sent).not.toContain("9999");
+    expect(phones.get("[번호1]")).toBe("010-1234-5678");
+  });
+
   it("숫자 개인정보를 가린다", () => {
     const { input, masked } = toPromptInput(
       request({ utterance: "엄마한테 010-1234-5678 로 50,000원 보내 줘" }),
@@ -150,12 +165,47 @@ describe("finalize", () => {
   });
 
   it("입력 칸(editable)을 tap 으로 가리키면 suggest 로 바꾼다", () => {
-    expect(finalize(1, output({ target_id: 13 }), ids, new Set([13]))).toMatchObject({
+    expect(finalize(1, output({ target_id: 13 }), ids, { editable: new Set([13]) })).toMatchObject({
       type: "suggest",
       target: 13,
       chips: [],
     });
-    expect(finalize(1, output({ target_id: 12 }), ids, new Set([13])).type).toBe("highlight");
+    expect(finalize(1, output({ target_id: 12 }), ids, { editable: new Set([13]) }).type).toBe(
+      "highlight",
+    );
+  });
+
+  it("자리표시는 번호 칸일 때만 진짜 번호로 되돌린다", () => {
+    const phones = new Map([["[번호1]", "010-1234-5678"]]);
+    const nodes = new Map([
+      [20, "전화번호"],
+      [21, "이름"],
+      [22, ""],
+    ]);
+    const typed = (target: number, inputState?: string) =>
+      finalize(
+        1,
+        output({
+          action: "type",
+          target_id: target,
+          type_text: "[번호1]",
+          speech: "번호 칸에 [번호1]을 넣을게요.",
+        }),
+        nodes,
+        { phones, ...(inputState ? { inputState } : {}) },
+      );
+    expect(typed(20)).toMatchObject({
+      type: "suggest",
+      typeText: "010-1234-5678",
+      chips: ["010-1234-5678"],
+      say: "번호 칸에 말씀하신 번호을 넣을게요.",
+    });
+    expect(typed(21)).not.toHaveProperty("typeText");
+    // 칸 글자가 없으면 앱이 알려 준 입력 상태로
+    expect(typed(22, "키보드 열림 · 입력 중: 전화번호")).toMatchObject({
+      typeText: "010-1234-5678",
+    });
+    expect(typed(22, "입력 중: 이름")).not.toHaveProperty("typeText");
   });
 
   it("type_text 가 비었거나 개인정보가 가려지면 typeText 없이 빈 chips", () => {
