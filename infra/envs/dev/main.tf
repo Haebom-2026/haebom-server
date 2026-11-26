@@ -51,16 +51,17 @@ module "review" {
   prefix                   = "haebom-dev"
   zip_path                 = "${path.root}/../../../dist/review.zip"
   permissions_boundary_arn = module.stack.lambda_boundary_arn
-  environment              = module.stack.common_env
-  main_table_arn           = module.stack.main_table_arn
-  main_stream_arn          = module.stack.main_stream_arn
-  debug_table_name         = module.debug.table_name
-  debug_table_arn          = module.debug.table_arn
-  debug_bucket_name        = module.debug.bucket_name
-  debug_bucket_arn         = module.debug.bucket_arn
-  anthropic_secret_id      = module.stack.secret_ids["anthropic-api-key"]
-  anthropic_secret_arn     = module.stack.secret_arns["anthropic-api-key"]
-  log_retention_days       = 14
+  # MAP_AUTO_APPLY: 검토 결과를 지도에 자동 반영 (docs/jev-routing-plan.md 8장, R5)
+  environment          = merge(module.stack.common_env, { MAP_AUTO_APPLY = "true" })
+  main_table_arn       = module.stack.main_table_arn
+  main_stream_arn      = module.stack.main_stream_arn
+  debug_table_name     = module.debug.table_name
+  debug_table_arn      = module.debug.table_arn
+  debug_bucket_name    = module.debug.bucket_name
+  debug_bucket_arn     = module.debug.bucket_arn
+  anthropic_secret_id  = module.stack.secret_ids["anthropic-api-key"]
+  anthropic_secret_arn = module.stack.secret_arns["anthropic-api-key"]
+  log_retention_days   = 14
 }
 
 # 지도 안내 (R4, dev 전용): ai-fn 이 지도 파티션(PK=MAP)을 Query 로 읽는다. 다른 파티션 Query 는 주지 않는다

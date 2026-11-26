@@ -2,7 +2,8 @@
  * review-fn: 끝난 명령을 Opus 로 검토 (docs/jev-routing-plan.md 7장, R3, dev 전용).
  *
  * main 테이블 DynamoDB Stream 에서, 명령 항목에 끝 신호(done·stopped_safe)가 처음 붙은 변경만
- * 받는다 (이벤트 필터는 infra/modules/review). 검토 결과는 판정만 저장하고 지도에 반영하지 않는다.
+ * 받는다 (이벤트 필터는 infra/modules/review). MAP_AUTO_APPLY=true(dev, R5)면 판정을 지도에 반영한다
+ * (accept → 후보 증거, 사람 확인이 필요하면 대기). 끝난 뒤 위험해진 명령은 넣었던 증거를 거둬들인다.
  * 실패한 레코드만 다시 받도록 batchItemFailures 를 돌려준다.
  */
 import type { AttributeValue } from "@aws-sdk/client-dynamodb";
@@ -17,9 +18,31 @@ import { SEED_MAP } from "../../route/seed-map.js";
 import { requireEnv } from "../../shared/config.js";
 import { createLogger } from "../../shared/logger.js";
 import { createClaudeReviewModel, DEFAULT_REVIEW_MODEL } from "../../review/model.js";
-import { reviewCommand, type ReviewDeps } from "../../review/review.js";
+import { reviewCommand, type ReviewDeps, type ReviewRecord } from "../../review/review.js";
+import { applyReview, retractCommand } from "../../map/apply.js";
+import { createAwsMapLearnStore, type MapLearnStore } from "../../map/learn.js";
 
 const log = createLogger({ service: "review" });
+
+let learnStore: MapLearnStore | undefined;
+/** 자동 반영이 켜져 있을 때만 (dev) */
+function getLearn(): MapLearnStore | undefined {
+  if (process.env.MAP_AUTO_APPLY !== "true") return undefined;
+  learnStore ??= createAwsMapLearnStore(requireEnv("TABLE_MAIN"));
+  return learnStore;
+}
+
+/** 검토된 명령을 지도에 반영. 재전달에도 안전 (증거는 조건부로 한 번만). 실패는 던져서 다시 받음 */
+async function applyToMap(uid: string, commandId: number, gen: string | undefined): Promise<void> {
+  const learn = getLearn();
+  if (!learn || gen === undefined) return;
+  const d = getDeps();
+  const review = (await d.commandLog.getReview(uid, commandId, gen)) as
+    (ReviewRecord & { invalidated?: string }) | undefined;
+  if (!review || review.invalidated !== undefined) return;
+  const outcome = await applyReview(uid, commandId, review, { ...d, learn });
+  log.info("map apply", { commandId, outcome: outcome.kind });
+}
 
 let deps: ReviewDeps | undefined;
 function getDeps(): ReviewDeps {
@@ -110,6 +133,17 @@ export const handler = async (event: DynamoDBStreamEvent): Promise<DynamoDBBatch
           turned.outcome,
         );
         log.info("review invalidated", { commandId: turned.commandId });
+        const learn = getLearn();
+        if (learn) {
+          const pulled = await retractCommand(
+            turned.uid,
+            turned.commandId,
+            turned.gen,
+            learn,
+            new Date(),
+          );
+          log.info("map evidence retracted", { commandId: turned.commandId, pulled });
+        }
       } catch (error) {
         log.error("review invalidate failed", { commandId: turned.commandId, error });
         if (record.dynamodb?.SequenceNumber) {
@@ -121,6 +155,8 @@ export const handler = async (event: DynamoDBStreamEvent): Promise<DynamoDBBatch
     if (!target) continue;
     try {
       await reviewCommand(target.uid, target.commandId, getDeps(), target.gen);
+      // 검토가 이미 있던 재전달도 반영을 다시 시도 (앞에서 반영이 실패했을 수 있음)
+      await applyToMap(target.uid, target.commandId, target.gen);
     } catch (error) {
       log.error("review failed", { commandId: target.commandId, error });
       if (record.dynamodb?.SequenceNumber) {

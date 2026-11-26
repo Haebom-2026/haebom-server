@@ -1,9 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { GuideModel } from "../src/ai/guide.js";
 import { createProfileGuard } from "../src/core/profile.js";
-import { createGuideTraceRecorder } from "../src/debug/guide-trace.js";
+import { createGuideTraceRecorder, uidDeviceId } from "../src/debug/guide-trace.js";
 import type { ScreenDocument } from "../src/debug/store.js";
+import { applyReview, retractCommand, type ApplyDeps } from "../src/map/apply.js";
+import {
+  devicesOf,
+  isStale,
+  nextWindow,
+  REQUIRED_DEVICES,
+  shouldDemote,
+  type AppliedRecord,
+  type EvidenceResult,
+  type MapLearnStore,
+  type PendingRecord,
+  type ResultTarget,
+} from "../src/map/learn.js";
 import { buildSeed } from "../src/map/seed.js";
+import { endCommand, endCommandRequestSchema } from "../src/route/command-end.js";
 import { actionsOf, stepsOfCommand, type ReviewRecord } from "../src/review/review.js";
 import { createGuideRoute } from "../src/functions/ai/routes/guide.js";
 import type { CommandLog, StepRecord } from "../src/route/command-log.js";
@@ -31,6 +45,15 @@ import { SEED_MAP } from "../src/route/seed-map.js";
 import { maskDeep } from "../src/shared/sensitive.js";
 
 const routeMap = parseMap(SEED_MAP);
+
+// 지도 고정 데이터의 날짜(2026-11-27) 기준으로 시계를 고정한다 (90일 지난 연결선 거르기가 실제 시계를 쓰므로)
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-27T09:00:00.000Z"));
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 const LAUNCHER = "com.sec.android.app.launcher";
 const SETTINGS = "com.android.settings";
 
@@ -253,7 +276,7 @@ describe("decideMapStep", () => {
       request("displayDone", { stepId: "s3", seq: 2, action: "tap", text: "밝기 최적화" }),
       command({ mapProgress: p3 }),
     );
-    expect(d4).toEqual({ kind: "ai", reason: "finish-complete", persist: true });
+    expect(d4).toMatchObject({ kind: "ai", reason: "finish-complete", persist: true });
   });
 
   it("끝 단계 뒤 화면이 그대로면 확인 안 됨 → Claude", () => {
@@ -585,7 +608,12 @@ describe("objectParticle", () => {
 
 describe("POST /v1/elder/guide 지도 안내", () => {
   const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 };
-  function setup(initial: CommandRecord, mapFails = false, replaced = false) {
+  function setup(
+    initial: CommandRecord,
+    mapFails = false,
+    replaced = false,
+    learn?: MapLearnStore,
+  ) {
     let record = structuredClone(initial);
     let reads = 0;
     let bump = false;
@@ -660,6 +688,7 @@ describe("POST /v1/elder/guide 지도 안내", () => {
                 updateBlock: () => Promise.resolve(),
               },
               routeMap,
+              learn,
             },
           }),
         },
@@ -721,6 +750,22 @@ describe("POST /v1/elder/guide 지도 안내", () => {
     const fourth = await t.post(request("home", undefined, 4));
     expect(fourth).toMatchObject({ source: "ai" });
     expect(t.record().mapProgress).toMatchObject({ mode: "ai", reason: "resend-limit" });
+  });
+
+  it("앞 연결선을 따라 맞는 화면에 오면 성공 하나를 센다 (재요청은 세지 않음)", async () => {
+    const results: { target: ResultTarget; ok: boolean }[] = [];
+    const learn = {
+      recordResult(target: ResultTarget, ok: boolean) {
+        results.push({ target, ok });
+        return Promise.resolve("recorded" as const);
+      },
+    } as unknown as MapLearnStore;
+    const t = setup(command(), false, false, learn);
+    const first = await t.post(request("home"));
+    const followed = { stepId: String(first.stepId), seq: 0, action: "tap" as const, text: "설정" };
+    await t.post(request("settings", followed, 2));
+    await t.post(request("settings", followed, 3));
+    expect(results).toEqual([{ target: { kind: "edge", id: E1.edgeId }, ok: true }]);
   });
 
   it("지도를 못 읽으면 Claude 로 넘긴 것을 저장한다", async () => {
@@ -886,5 +931,435 @@ describe("buildSeed", () => {
     expect(
       buildSeed({ ...input, review: { ...review, opus: { ...review.opus, personalText: true } } }),
     ).toMatchObject({ ok: false });
+  });
+});
+
+describe("R5 자동 반영", () => {
+  /** 메모리 지도 학습 저장소 (AWS 판과 같은 규칙: 조건부 증거, 기기 2대면 verified, 실패 쌓이면 내림) */
+  function memoryLearn() {
+    type Item = {
+      status: string;
+      evidence: Set<string>;
+      old: Set<string>;
+      recent: number[];
+      origin: string;
+    };
+    const items = new Map<string, Item>();
+    const goals = new Map<
+      string,
+      { finish: MapFinishStep[]; arriveFps: Set<string>; status: string }
+    >();
+    const pending = new Map<string, PendingRecord>();
+    const applied = new Map<string, AppliedRecord>();
+    const results: { target: ResultTarget; ok: boolean }[] = [];
+    const add = (k: string, entry: string): EvidenceResult => {
+      const it = items.get(k) ?? {
+        status: "candidate",
+        evidence: new Set(),
+        old: new Set(),
+        recent: [],
+        origin: "learned",
+      };
+      items.set(k, it);
+      if (it.evidence.has(entry) || it.old.has(entry)) return "duplicate";
+      it.evidence.add(entry);
+      if (it.status === "candidate" && devicesOf([...it.evidence]).size >= REQUIRED_DEVICES) {
+        it.status = "verified";
+        return "promoted";
+      }
+      return "added";
+    };
+    const key = (uid: string, id: number, gen: string) => `${uid}#${id}#${gen}`;
+    const store: MapLearnStore = {
+      ensureGoal(goal) {
+        const g = goals.get(goal.goalId);
+        if (g && JSON.stringify(g.finish) !== JSON.stringify(goal.finish))
+          return Promise.resolve("conflict");
+        if (!g)
+          goals.set(goal.goalId, {
+            finish: goal.finish,
+            arriveFps: new Set(),
+            status: "candidate",
+          });
+        return Promise.resolve("ok");
+      },
+      addEdgeEvidence: (edge, entry) => Promise.resolve(add(`EDGE#${edge.edgeId}`, entry)),
+      addArriveEvidence(goalId, fp, entry) {
+        const r = add(`ARRIVE#${goalId}#${fp}`, entry);
+        const g = goals.get(goalId);
+        if (r === "promoted" && g) {
+          g.arriveFps.add(fp);
+          g.status = "verified";
+        }
+        return Promise.resolve(r);
+      },
+      recordResult(target, ok) {
+        results.push({ target, ok });
+        return Promise.resolve("recorded");
+      },
+      putSeedArrive(goalId, fp, entry) {
+        items.set(`ARRIVE#${goalId}#${fp}`, {
+          status: "verified",
+          evidence: new Set([entry]),
+          old: new Set(),
+          recent: [],
+          origin: "seed",
+        });
+        return Promise.resolve();
+      },
+      putApplied(r) {
+        applied.set(key(r.uid, r.commandId, r.gen), r);
+        return Promise.resolve();
+      },
+      getApplied: (uid, id, gen) => Promise.resolve(applied.get(key(uid, id, gen))),
+      retract(r) {
+        for (const id of r.edgeIds) {
+          const it = items.get(`EDGE#${id}`);
+          it?.evidence.delete(r.entry);
+          if (it && it.status === "verified" && devicesOf([...it.evidence]).size < REQUIRED_DEVICES)
+            it.status = "candidate";
+        }
+        const a = items.get(`ARRIVE#${r.goalId}#${r.arriveFp}`);
+        a?.evidence.delete(r.entry);
+        if (a && a.status === "verified" && devicesOf([...a.evidence]).size < REQUIRED_DEVICES) {
+          a.status = "candidate";
+          goals.get(r.goalId)?.arriveFps.delete(r.arriveFp);
+        }
+        applied.delete(key(r.uid, r.commandId, r.gen));
+        return Promise.resolve();
+      },
+      putPending(p) {
+        pending.set(key(p.uid, p.commandId, p.gen), p);
+        return Promise.resolve();
+      },
+      listPending: () => Promise.resolve([...pending.values()]),
+      deletePending(uid, id, gen) {
+        pending.delete(key(uid, id, gen));
+        return Promise.resolve();
+      },
+    };
+    return { store, items, goals, pending, applied, results };
+  }
+
+  const docOf = (name: keyof typeof screens, deviceId: string): ScreenDocument => {
+    const req = request(name);
+    return {
+      screenId: name,
+      deviceId,
+      receivedAt: "",
+      capturedAt: "",
+      pkg: req.screen.pkg,
+      fingerprint: "",
+      fpVersion: "fp@v1",
+      nodeCount: req.screen.nodes.length,
+      maskedCount: 0,
+      pinned: false,
+      screen: { ...req.screen, nodes: maskDeep(req.screen.nodes).value },
+    };
+  };
+  const NAMES = ["home", "settings", "display"] as const;
+  /** 한 기기에서 홈 → 설정 → 디스플레이 → 밝기 최적화로 끝낸 명령 하나 */
+  function run(uid: string, deviceId: string, over: Partial<CommandRecord> = {}) {
+    const cmd = command({
+      uid,
+      endResult: "done",
+      finalScreen: { deviceId, screenId: "final" },
+      finalAction: { stepId: "s2", seq: 2, action: "tap", text: "밝기 최적화" },
+      ...over,
+    });
+    const texts = ["설정", "디스플레이"];
+    const steps: StepRecord[] = NAMES.map((name, n) => ({
+      uid,
+      commandId: 1,
+      stepId: `s${n}`,
+      receivedAt: `2026-11-27T00:00:0${n + 1}.000Z`,
+      screen: { deviceId, screenId: name },
+      pkg: SETTINGS,
+      guide: { type: "highlight", source: "ai" },
+      ...(n > 0
+        ? {
+            lastAction: {
+              stepId: `s${n - 1}`,
+              seq: n - 1,
+              action: "tap",
+              text: texts[n - 1] ?? "",
+            },
+          }
+        : {}),
+    }));
+    const deps = (learn: MapLearnStore): ApplyDeps => ({
+      commands: {
+        create: () => Promise.resolve("created"),
+        get: () => Promise.resolve(cmd),
+        update: () => Promise.resolve("ok"),
+      },
+      commandLog: {
+        appendStep: () => Promise.resolve(),
+        listSteps: () => Promise.resolve(steps),
+        saveReview: () => Promise.resolve(true),
+        getReview: () => Promise.resolve(undefined),
+        invalidateReview: () => Promise.resolve(),
+      },
+      getScreen: (ref) =>
+        Promise.resolve(
+          docOf(
+            ref.screenId === "final" ? "displayDone" : (ref.screenId as keyof typeof screens),
+            deviceId,
+          ),
+        ),
+      learn,
+      map: routeMap,
+      log: createLogger({}, { write: () => undefined }),
+      now: () => new Date("2026-11-27T00:00:00.000Z"),
+    });
+    return { cmd, deps };
+  }
+  const reviewOf = (over: Partial<ReviewRecord> = {}): ReviewRecord => ({
+    version: "review@v1",
+    model: "m",
+    reviewedAt: "",
+    commandId: 1,
+    gen: "g1",
+    outcome: "accept",
+    reasons: [],
+    goal: { kind: "existing", id: "settings.brightness_down" },
+    edges: [],
+    finish: [],
+    opus: {
+      success: "yes",
+      evidence: "",
+      goal: { kind: "existing", id: "settings.brightness_down", proposal: null },
+      moves: [
+        { seq: 0, action: "tap", text: "설정" },
+        { seq: 1, action: "tap", text: "디스플레이" },
+      ],
+      finish: [{ seq: 2, action: "tap", text: "밝기 최적화", verify: "node_state" }],
+      sensitiveSeqs: [],
+      personalText: false,
+    },
+    stats: { screens: 3, actions: 3, ms: 1 },
+    ...over,
+  });
+
+  it("기기 한 대는 후보, 다른 기기에서 또 성공하면 verified (같은 명령 재전달은 한 번만)", async () => {
+    const m = memoryLearn();
+    const a = run("u1", "dev-a");
+    expect(await applyReview("u1", 1, reviewOf(), a.deps(m.store))).toMatchObject({
+      kind: "applied",
+      edges: 2,
+      promoted: 0,
+    });
+    expect(m.items.get(`EDGE#${E1.edgeId}`)?.status).toBe("candidate");
+    expect(m.goals.get(GOAL.goalId)?.status).toBe("candidate");
+    // 재전달
+    expect(await applyReview("u1", 1, reviewOf(), a.deps(m.store))).toMatchObject({ promoted: 0 });
+    expect(m.items.get(`EDGE#${E1.edgeId}`)?.evidence.size).toBe(1);
+    // 같은 기기 다른 사람도 기기 한 대
+    await applyReview("u2", 1, reviewOf(), run("u2", "dev-a").deps(m.store));
+    expect(m.items.get(`EDGE#${E1.edgeId}`)?.status).toBe("candidate");
+    // 다른 기기
+    expect(await applyReview("u3", 1, reviewOf(), run("u3", "dev-b").deps(m.store))).toMatchObject({
+      promoted: 3,
+    });
+    expect(m.items.get(`EDGE#${E1.edgeId}`)?.status).toBe("verified");
+    expect(m.goals.get(GOAL.goalId)).toMatchObject({ status: "verified" });
+    expect([...(m.goals.get(GOAL.goalId)?.arriveFps ?? [])]).toEqual([FP.display]);
+    expect(m.pending.size).toBe(0);
+  });
+
+  it("human·새 목표·L2·끝 단계 충돌은 사람 확인 대기, reject·실패는 아무것도", async () => {
+    const m = memoryLearn();
+    const a = run("u1", "dev-a");
+    expect(
+      await applyReview(
+        "u1",
+        1,
+        reviewOf({ outcome: "human", reasons: ["other_app"] }),
+        a.deps(m.store),
+      ),
+    ).toMatchObject({
+      kind: "pending",
+      reasons: ["human_review", "other_app"],
+    });
+    expect(
+      await applyReview(
+        "u1",
+        1,
+        reviewOf({ goal: { kind: "new", proposal: { name: "x", desc: "y", slots: [] } } }),
+        a.deps(m.store),
+      ),
+    ).toMatchObject({ kind: "pending", reasons: ["new_goal"] });
+    expect(m.pending.get("u1#1#g1")?.proposal).toMatchObject({ name: "x" });
+    expect(
+      await applyReview("u1", 1, reviewOf(), run("u1", "dev-a", { level: "L2" }).deps(m.store)),
+    ).toMatchObject({
+      kind: "pending",
+      reasons: ["sensitive_goal"],
+    });
+    m.goals.set(GOAL.goalId, { finish: [], arriveFps: new Set(), status: "verified" });
+    expect(await applyReview("u1", 1, reviewOf(), a.deps(m.store))).toMatchObject({
+      kind: "pending",
+      reasons: ["finish_conflict"],
+    });
+    expect(
+      await applyReview("u1", 1, reviewOf({ outcome: "reject" }), a.deps(m.store)),
+    ).toMatchObject({ kind: "skipped" });
+    const noSuccess = reviewOf();
+    const opus = noSuccess.opus;
+    if (!opus) throw new Error("fixture");
+    expect(
+      await applyReview(
+        "u1",
+        1,
+        { ...noSuccess, opus: { ...opus, success: "unsure" } },
+        a.deps(m.store),
+      ),
+    ).toMatchObject({
+      kind: "skipped",
+    });
+  });
+
+  it("가상 기기(uid 기반)는 기기로 세지 않고, 화면을 못 읽으면 던져서 다시 받는다", async () => {
+    const m = memoryLearn();
+    const virtual = run("u1", uidDeviceId("u1"));
+    expect(await applyReview("u1", 1, reviewOf(), virtual.deps(m.store))).toMatchObject({
+      kind: "skipped",
+      reason: "virtual-device",
+    });
+    const a = run("u1", "dev-a");
+    const deps = a.deps(m.store);
+    await expect(
+      applyReview("u1", 1, reviewOf(), { ...deps, getScreen: () => Promise.resolve(undefined) }),
+    ).rejects.toThrow("screen missing");
+    expect(m.items.size).toBe(0);
+  });
+
+  it("무효가 된 명령은 증거를 거둬들이고 기기가 모자라면 내린다", async () => {
+    const m = memoryLearn();
+    await applyReview("u1", 1, reviewOf(), run("u1", "dev-a").deps(m.store));
+    await applyReview("u3", 1, reviewOf(), run("u3", "dev-b").deps(m.store));
+    expect(m.items.get(`EDGE#${E1.edgeId}`)?.status).toBe("verified");
+    expect(await retractCommand("u3", 1, "g1", m.store, new Date())).toBe(true);
+    expect(m.items.get(`EDGE#${E1.edgeId}`)?.status).toBe("candidate");
+    expect(m.goals.get(GOAL.goalId)?.arriveFps.size).toBe(0);
+    expect(await retractCommand("u3", 1, "g1", m.store, new Date())).toBe(false);
+  });
+
+  it("결과 세기: 따른 연결선이 맞으면 성공, 다른 화면이면 실패, 덜 민 끝 단계는 세지 않음", () => {
+    const p = progressAfter(decide(request("home")), "s1");
+    const okNext = decide(
+      request("settings", { stepId: "s1", seq: 0, action: "tap", text: "설정" }),
+      command({ mapProgress: p }),
+    );
+    expect(okNext.result).toEqual({ kind: "edge", id: E1.edgeId, ok: true });
+    const bad = decide(
+      request("display", { stepId: "s1", seq: 0, action: "tap", text: "설정" }),
+      command({ mapProgress: p }),
+    );
+    expect(bad.result).toEqual({ kind: "edge", id: E1.edgeId, ok: false });
+    const other = decide(
+      request("settings", { stepId: "s1", seq: 0, action: "tap", text: "카메라" }),
+      command({ mapProgress: p }),
+    );
+    expect(other.result).toBeUndefined();
+    const pf = progressAfter(decide(request("display")), "s3");
+    const same = decide(
+      request("display", { stepId: "s3", seq: 2, action: "tap", text: "밝기 최적화" }),
+      command({ mapProgress: pf }),
+    );
+    expect(same).toMatchObject({ reason: "finish-not-verified" });
+    expect(same.result).toBeUndefined();
+  });
+
+  it("마지막 끝 단계는 seed 때 본 다음 화면과 같을 때만 성공으로 센다", () => {
+    const withAfter = (afterFp: string) =>
+      snapshot({
+        goals: new Map([
+          [GOAL.goalId, { ...GOAL, finish: GOAL.finish.map((f) => ({ ...f, afterFp })) }],
+        ]),
+      });
+    const after = { stepId: "s3", seq: 2, action: "tap" as const, text: "밝기 최적화" };
+    const p = progressAfter(decide(request("display"), command(), withAfter(FP.displayDone)), "s3");
+    expect(
+      decide(request("displayDone", after), command({ mapProgress: p }), withAfter(FP.displayDone))
+        .result,
+    ).toEqual({ kind: "goal", id: GOAL.goalId, ok: true });
+    expect(
+      decide(request("displayDone", after), command({ mapProgress: p }), withAfter("elsewhere"))
+        .result,
+    ).toBeUndefined();
+  });
+
+  it("따랐는데 다른 앱에 왔어도 연결선 실패로 센다", () => {
+    const p = progressAfter(decide(request("home")), "s1");
+    const req = request("settings", { stepId: "s1", seq: 0, action: "tap", text: "설정" });
+    const other = guideRequestSchema.parse({
+      ...req,
+      screen: { ...req.screen, pkg: "com.example.other" },
+    });
+    const d = decide(other, command({ mapProgress: p }));
+    expect(d).toMatchObject({ kind: "ai", reason: "other-app" });
+    expect(d.result).toEqual({ kind: "edge", id: E1.edgeId, ok: false });
+  });
+
+  it("90일 안 쓰인 연결선은 쓰지 않는다", () => {
+    const old = { ...E1, createdAt: "2026-01-01T00:00:00.000Z" };
+    const req = request("home");
+    const { nodes, fp } = fpOf(req);
+    const d = decideMapStep({
+      request: req,
+      maskedNodes: nodes,
+      fp,
+      command: command(),
+      snapshot: snapshot({ edges: [old, E2] }),
+      routeMap,
+      now: new Date("2026-11-27T00:00:00.000Z"),
+    });
+    expect(d).toMatchObject({ kind: "ai", reason: "no-path" });
+    expect(
+      isStale(
+        { ...old, lastUsedAt: "2026-11-01T00:00:00.000Z" },
+        new Date("2026-11-27T00:00:00.000Z"),
+      ),
+    ).toBe(false);
+  });
+
+  it("지도 안내 중 포기로 끝나면 마지막 연결선의 실패로 센다", async () => {
+    const m = memoryLearn();
+    const cmd = command({
+      mapProgress: { mode: "map", stepId: "s1", fp: FP.home, kind: "edge", ref: E1.edgeId },
+    });
+    const commands = {
+      create: () => Promise.resolve("created" as const),
+      get: () => Promise.resolve(cmd),
+      update: () => Promise.resolve("ok" as const),
+    };
+    const log = createLogger({}, { write: () => undefined });
+    await endCommand("u1", 1, endCommandRequestSchema.parse({ result: "gave_up" }), {
+      commands,
+      learn: m.store,
+      log,
+    });
+    expect(m.results).toEqual([{ target: { kind: "edge", id: E1.edgeId }, ok: false }]);
+    await endCommand("u1", 1, endCommandRequestSchema.parse({ result: "done" }), {
+      commands,
+      learn: m.store,
+      log,
+    });
+    expect(m.results).toHaveLength(1);
+  });
+
+  it("결과 창: 최근 20개, 실패 30% 넘으면 내림 대상", () => {
+    let w: number[] = [];
+    for (let i = 0; i < 25; i += 1) w = nextWindow(w, true);
+    expect(w).toHaveLength(20);
+    expect(shouldDemote(w)).toBe(false);
+    for (let i = 0; i < 6; i += 1) w = nextWindow(w, false);
+    // 20 중 6 = 30%: 넘지 않음
+    expect(shouldDemote(w)).toBe(false);
+    w = nextWindow(w, false);
+    expect(shouldDemote(w)).toBe(true);
+    expect(shouldDemote([])).toBe(false);
+    expect(devicesOf(["a#1#g@d1", "b#1#g@d1", "c#1#g@seed", "x"])).toEqual(new Set(["d1"]));
   });
 });

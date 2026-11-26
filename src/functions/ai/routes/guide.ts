@@ -9,6 +9,7 @@ import type { ProfileGuard } from "../../../core/profile.js";
 import type { GuideTraceRecorder } from "../../../debug/guide-trace.js";
 import { mapFingerprint } from "../../../map/fingerprint.js";
 import { decideMapStep, MAP_PROMPT_VERSION } from "../../../map/guide.js";
+import type { MapLearnStore } from "../../../map/learn.js";
 import type { MapStore } from "../../../map/store.js";
 import type { CommandLog } from "../../../route/command-log.js";
 import type { CommandStore } from "../../../route/command-store.js";
@@ -35,6 +36,8 @@ export interface MapGuideDeps {
   commands: CommandStore;
   maps: MapStore;
   routeMap: IndexedMap;
+  /** (R5) 지도 안내 결과(앞 연결선·끝 단계가 맞았나)를 세어 실패가 쌓이면 내림 */
+  learn?: MapLearnStore | undefined;
 }
 
 /**
@@ -165,6 +168,17 @@ async function tryMap(
       routeMap: deps.routeMap,
     });
     const read = { gen: command.gen, rev: command.rev };
+    // 앞 안내의 결과는 진행 상태를 바꾸는 쓰기가 성공한 요청만 센다 (재시도·겹친 요청이 두 번 세지 않게)
+    const countResult = async () => {
+      if (!decision.result || !deps.learn) return;
+      const { ok, ...target } = decision.result;
+      try {
+        const out = await deps.learn.recordResult(target, ok, new Date());
+        log.info("map result", { ...decision.result, out });
+      } catch (error) {
+        log.warn("map result failed", { error });
+      }
+    };
     switch (decision.kind) {
       case "resend": {
         const { stepId } = decision.response;
@@ -196,6 +210,7 @@ async function tryMap(
           return { info: { fp, decision: "ai", reason: `progress-${saved}` } };
         }
         log.info("map step", { kind: decision.progress.kind, ref: decision.progress.ref });
+        await countResult();
         return {
           response,
           info: {
@@ -210,6 +225,7 @@ async function tryMap(
           const saved = await deps.commands.update(uid, commandId, read, {
             mapProgress: { mode: "ai", reason: decision.reason },
           });
+          if (saved === "ok") await countResult();
           if (saved === "conflict") {
             await persistAi(deps, uid, commandId, command.gen, decision.reason, log);
           }

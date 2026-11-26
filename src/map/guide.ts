@@ -12,6 +12,7 @@ import type { IndexedMap } from "../route/map.js";
 import { isLauncher, isSensitiveLabel, isSensitiveScreen } from "../review/safety-words.js";
 import { maskText } from "../shared/sensitive.js";
 import type { ScreenDocument } from "../debug/store.js";
+import { isStale, type ResultTarget } from "./learn.js";
 import type { MapEdge, MapFinishStep, MapSnapshot } from "./store.js";
 
 export const MAP_PROMPT_VERSION = "map@v1";
@@ -19,17 +20,22 @@ const SAY_MAX = 80;
 /** 같은 화면에서 같은 지도 안내를 다시 주는 최대 횟수. 넘으면 Claude (누를 수 없는 버튼에 갇히지 않게) */
 export const MAX_RESENDS = 2;
 
+/** 앞 지도 안내가 맞았나 (8.3 결과 세기). 다른 것을 누른 경우처럼 어르신 선택은 세지 않음 */
+export type MapResult = ResultTarget & { ok: boolean };
+
 export type MapDecision =
   /** 지도로 한 단계. progress 는 저장할 진행 상태 (stepId 는 라우트가 붙임) */
-  | {
-      kind: "step";
-      response: Omit<GuideResponse, "stepId">;
-      progress: Omit<MapProgress, "stepId">;
-    }
-  /** 같은 화면 재요청: 같은 stepId 로 지금 화면 기준 다시 만든 안내. resends 는 저장할 다시 준 횟수 */
-  | { kind: "resend"; response: GuideResponse; resends: number }
-  /** Claude 로. persist 면 진행 상태를 ai 로 바꿔 저장 (Claude 가 안내를 시작한 명령에 지도가 끼어들지 않게) */
-  | { kind: "ai"; reason: string; persist: boolean };
+  (
+    | {
+        kind: "step";
+        response: Omit<GuideResponse, "stepId">;
+        progress: Omit<MapProgress, "stepId">;
+      }
+    /** 같은 화면 재요청: 같은 stepId 로 지금 화면 기준 다시 만든 안내. resends 는 저장할 다시 준 횟수 */
+    | { kind: "resend"; response: GuideResponse; resends: number }
+    /** Claude 로. persist 면 진행 상태를 ai 로 바꿔 저장 (Claude 가 안내를 시작한 명령에 지도가 끼어들지 않게) */
+    | { kind: "ai"; reason: string; persist: boolean }
+  ) & { result?: MapResult };
 
 export interface MapDecideInput {
   request: GuideRequest;
@@ -40,6 +46,8 @@ export interface MapDecideInput {
   command: CommandRecord;
   snapshot: MapSnapshot;
   routeMap: IndexedMap;
+  /** 90일 안 쓰인 연결선을 거르는 기준 시각 (기본 지금) */
+  now?: Date;
 }
 
 /** 노드 클래스의 마지막 이름 (android.widget.TextView → TextView) */
@@ -58,7 +66,16 @@ const sameTarget = (actionText: string, targetText: string): boolean =>
   exactLabel(maskText(actionText).text) === exactLabel(targetText);
 
 export function decideMapStep(input: MapDecideInput): MapDecision {
+  let result: MapResult | undefined;
+  const decision = decide(input, (r) => {
+    result = r;
+  });
+  return result ? { ...decision, result } : decision;
+}
+
+function decide(input: MapDecideInput, report: (result: MapResult) => void): MapDecision {
   const { request, command, snapshot, routeMap, fp } = input;
+  const now = input.now ?? new Date();
   const progress = command.mapProgress;
   // Claude 로 넘긴 것을 저장해 다음부터 지도를 보지 않는다 (Claude → 지도로는 돌아가지 않음)
   const ai = (reason: string): MapDecision => ({ kind: "ai", reason, persist: true });
@@ -72,6 +89,10 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
   if (!progress && (last?.stepId !== undefined || request.history.length > 0)) {
     return ai("claude-started");
   }
+  // 앞 지도 안내를 그대로 따랐는데 다른 화면(다른 앱·민감한 화면 포함)에 왔으면 그 실패를 먼저 센다
+  // (아래의 앱·화면 검사가 먼저 돌려보내면 고장 난 연결선이 계속 verified 로 남음)
+  const failed = followedButMissed(input);
+  if (failed) report(failed);
 
   // ── 전제: 고른 목표가 지도에 검증되어 있고, 위험하지 않은 명령 ──
   if (command.chosenApp === undefined || command.chosenGoal === undefined) return ai("no-goal");
@@ -93,7 +114,8 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
   if (isSensitiveScreen(screenDoc as unknown as ScreenDocument)) return ai("sensitive-screen");
 
   const edges = snapshot.edges.filter(
-    (e) => e.status === "verified" && !snapshot.block.edgeIds.includes(e.edgeId),
+    (e) =>
+      e.status === "verified" && !snapshot.block.edgeIds.includes(e.edgeId) && !isStale(e, now),
   );
 
   // ── 앞 안내와의 관계 ──
@@ -119,7 +141,11 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
       if (edge.action === "tap" && !sameTarget(last.text, edge.targetText)) {
         return ai("different-target");
       }
-      if (edge.toFp !== fp) return ai("unexpected-screen");
+      if (edge.toFp !== fp) {
+        report({ kind: "edge", id: edge.edgeId, ok: false });
+        return ai("unexpected-screen");
+      }
+      report({ kind: "edge", id: edge.edgeId, ok: true });
     } else {
       const index = Number(progress.ref);
       const step = goal.finish[index];
@@ -129,9 +155,18 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
         return ai("different-target");
       }
       // page: 다음 화면으로 바뀜, node_state: 체크·선택이 바뀜 → 둘 다 지문이 달라져야 확인됨
+      // 화면이 그대로인 것은 실패로 세지 않는다: 아직 덜 밀었을 수 있고, 막대 값(숫자)은 지문에서 # 로 같아짐
       if (fp === progress.fp) return ai("finish-not-verified");
       // 다음 끝 단계는 seed 때 본 그 화면에서만 (다른 것이 바뀌었거나 다른 화면이면 Claude)
-      if (goal.finish[index + 1] && step.afterFp !== fp) return ai("finish-unexpected-screen");
+      if (goal.finish[index + 1] && step.afterFp !== fp) {
+        report({ kind: "goal", id: goal.goalId, ok: false });
+        return ai("finish-unexpected-screen");
+      }
+      // 마지막 끝 단계는 seed 때 본 그 다음 화면과 같을 때만 성공으로 센다 (다르면 실패로도 안 셈:
+      // 마지막 화면은 알림·안내 창으로 달라지기 쉬움. 다 됐는지는 Claude 가 화면을 보고 판단)
+      if (goal.finish[index + 1] || step.afterFp === fp) {
+        report({ kind: "goal", id: goal.goalId, ok: true });
+      }
       finishFrom = index + 1;
       inFinish = true;
     }
@@ -152,6 +187,36 @@ export function decideMapStep(input: MapDecideInput): MapDecision {
   const first = firstEdgeToward(fp, new Set(goal.arriveFps), edges);
   if (!first) return ai("no-path");
   return toStep(input, first, { mode: "map", fp, kind: "edge", ref: first.edgeId });
+}
+
+/**
+ * 앞 지도 안내를 따랐는데(같은 stepId·같은 행동·같은 글자) 기대한 화면이 아닌가. 어르신이 다른 것을
+ * 누른 경우는 세지 않는다. 덜 민 끝 단계(화면 그대로)와 마지막 끝 단계도 세지 않는다 (decide 와 같은 규칙)
+ */
+function followedButMissed(input: MapDecideInput): MapResult | undefined {
+  const { command, snapshot, fp } = input;
+  const progress = command.mapProgress;
+  const last = input.request.lastAction;
+  if (
+    progress?.mode !== "map" ||
+    progress.stepId === undefined ||
+    last?.stepId !== progress.stepId
+  ) {
+    return undefined;
+  }
+  if (progress.kind === "edge") {
+    const edge = snapshot.edges.find((e) => e.edgeId === progress.ref);
+    if (!edge || last.action !== edge.action) return undefined;
+    if (edge.action === "tap" && !sameTarget(last.text, edge.targetText)) return undefined;
+    return edge.toFp === fp ? undefined : { kind: "edge", id: edge.edgeId, ok: false };
+  }
+  const goal = command.chosenGoal ? snapshot.goals.get(command.chosenGoal) : undefined;
+  const index = Number(progress.ref);
+  const step = goal?.finish[index];
+  if (!goal || !step || last.action !== step.action) return undefined;
+  if (step.action === "tap" && !sameTarget(last.text, step.targetText)) return undefined;
+  if (fp === progress.fp || !goal.finish[index + 1]) return undefined;
+  return step.afterFp === fp ? undefined : { kind: "goal", id: goal.goalId, ok: false };
 }
 
 /** 앞에 준 지도 안내를 지금 지도·화면 기준으로 다시 만든다 (같은 화면 재요청) */

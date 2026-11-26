@@ -7,7 +7,9 @@
  *   차단   : SK BLOCK            — 바로 막을 연결선·목표 (긴급 차단)
  *
  * ai-fn 은 파티션 전체를 읽어 1분 동안 메모리에 둔다 (dev 규모). 기획서의 S3 스냅샷 게시는
- * 지도가 커지면 옮긴다. 쓰기는 사람 승인 스크립트(scripts/map-seed.ts)만 한다 (R5 자동 반영 전).
+ * 지도가 커지면 옮긴다. 쓰기: 사람 승인 seed(scripts/map-seed.ts, 바로 verified)와
+ * 자동 반영(learn.ts, R5: 후보 → 기기 2대면 verified).
+ * evidence·arriveFps 는 String Set 으로 저장한다 (자동 반영이 원자적으로 ADD·DELETE).
  */
 import { createHash } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -39,6 +41,11 @@ export interface MapEdge {
   /** 증거: 어느 명령(uid#commandId#gen)에서 나왔나 */
   evidence: string[];
   createdAt: string;
+  /** (R5) 마지막으로 성공한 때. 90일 지나면 안내에 쓰지 않음 */
+  lastUsedAt?: string;
+  /** (R5) 최근 결과 1 성공 / 0 실패 (최대 20개) */
+  recent?: number[];
+  demotedAt?: string;
 }
 
 export interface MapFinishStep {
@@ -95,6 +102,10 @@ export function toIdList(value: unknown): string[] {
   return [];
 }
 
+/** 문자열 배열 → String Set (DynamoDB 는 빈 Set 을 받지 않으므로 비면 칸을 뺌) */
+const asSet = (values: readonly string[]): Set<string> | undefined =>
+  values.length > 0 ? new Set(values) : undefined;
+
 /** 같은 이동은 같은 id: 출발·도착 지문 + 행동 + 글자 + 클래스 */
 export function edgeIdOf(
   e: Pick<MapEdge, "fromFp" | "toFp" | "action" | "targetText" | "targetClass">,
@@ -131,9 +142,15 @@ export function createAwsMapStore(
       );
       for (const item of out.Items ?? []) {
         const sk = String(item.SK);
-        if (sk.startsWith("EDGE#")) edges.push(item as unknown as MapEdge);
-        else if (sk.startsWith("GOAL#")) {
-          const goal = item as unknown as MapGoal;
+        if (sk.startsWith("EDGE#")) {
+          edges.push({ ...(item as unknown as MapEdge), evidence: toIdList(item.evidence) });
+        } else if (sk.startsWith("GOAL#")) {
+          const goal: MapGoal = {
+            ...(item as unknown as MapGoal),
+            arriveFps: toIdList(item.arriveFps),
+            evidence: toIdList(item.evidence),
+            finish: Array.isArray(item.finish) ? (item.finish as MapFinishStep[]) : [],
+          };
           goals.set(goal.goalId, goal);
         } else if (sk === "BLOCK") block = item;
       }
@@ -204,7 +221,13 @@ export function createAwsMapStore(
       await doc.send(
         new PutCommand({
           TableName: table,
-          Item: { PK: MAP_PK, SK: `EDGE#${edge.edgeId}`, type: "map-edge", ...edge },
+          Item: {
+            PK: MAP_PK,
+            SK: `EDGE#${edge.edgeId}`,
+            type: "map-edge",
+            ...edge,
+            evidence: asSet(edge.evidence),
+          },
         }),
       );
       cached = undefined;
@@ -246,7 +269,14 @@ export function createAwsMapStore(
       await doc.send(
         new PutCommand({
           TableName: table,
-          Item: { PK: MAP_PK, SK: `GOAL#${goal.goalId}`, type: "map-goal", ...goal },
+          Item: {
+            PK: MAP_PK,
+            SK: `GOAL#${goal.goalId}`,
+            type: "map-goal",
+            ...goal,
+            arriveFps: asSet(goal.arriveFps),
+            evidence: asSet(goal.evidence),
+          },
         }),
       );
       cached = undefined;
