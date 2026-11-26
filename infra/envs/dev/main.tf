@@ -13,6 +13,9 @@ module "stack" {
   secret_recovery_window_in_days = 0
   log_retention_days             = 14
 
+  # jev 앱·목표 고르기 (docs/jev-routing-plan.md). 키: Secrets haebom-dev/openrouter-api-key
+  route_enabled = true
+
   # guide 요청·AI 판단을 디버그 뷰어에 기록 (dev 전용)
   ai_extra_environment = {
     DEBUG_TABLE  = module.debug.table_name
