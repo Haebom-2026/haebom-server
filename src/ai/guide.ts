@@ -7,6 +7,7 @@
 import type { GuideModelOutput, GuideRequest, GuideResponse } from "./guide-schema.js";
 import { maskDeep, maskText } from "../shared/sensitive.js";
 import type { Logger } from "../shared/logger.js";
+import { GUIDE_PROMPT_VERSION } from "./prompts/guide.js";
 
 export const SAY_MAX = 60;
 export const CHIPS_MAX = 4;
@@ -16,7 +17,6 @@ export const FALLBACK_SAY = {
   busy: "서버가 잠시 바빠요. 조금 뒤에 다시 말씀해 주세요.",
   unsure: "제가 화면을 잘 못 알아봤어요. 다시 말씀해 주시겠어요?",
   secret: "이 화면은 직접 입력해 주세요. 제가 대신 보지 않을게요.",
-  bank: "은행 일은 화면을 보지 않고 안내해 드려요. 직접 확인해 주세요.",
 } as const;
 
 /** 모델에게 보내는 화면 요소: 위치를 화면 대비 % 로 바꾼 압축 형태. */
@@ -26,7 +26,12 @@ export interface PromptNode {
   d?: string;
   c?: string;
   pos?: [number, number, number, number];
+  /** 앱이 보낸 상태 중 true 인 것만 (clickable, editable, scrollable, checked, selected) */
+  state?: string[];
 }
+
+export const NODE_STATES = ["clickable", "editable", "scrollable", "checked", "selected"] as const;
+export const TARGET_TEXT_MAX = 100;
 
 export interface GuidePromptInput {
   goal: string;
@@ -49,7 +54,8 @@ export type GuideModelResult =
 
 export type GuideModel = (input: GuidePromptInput) => Promise<GuideModelResult>;
 
-const SECRET_FIELD = /비밀\s?번호|패스워드|password|인증\s?번호|OTP|보안\s?카드|CVC|CVV/i;
+const SECRET_FIELD =
+  /비밀\s?번호|패스워드|password|passcode|암호|인증\s?번호|OTP|보안\s?카드|CVC|CVV|PIN\b|핀\s?번호|주민\s?(등록)?\s?번호|생년월일\s?6자리/i;
 
 /** 비밀번호·인증번호 입력 화면이면 화면을 모델에 보내지 않는다. */
 export function isSecretScreen(request: GuideRequest): boolean {
@@ -76,6 +82,8 @@ export function toPromptInput(request: GuideRequest): { input: GuidePromptInput;
       const [l, t, r, b] = node.b;
       out.pos = [percent(l, width), percent(t, height), percent(r, width), percent(b, height)];
     }
+    const state = NODE_STATES.filter((name) => (node as Record<string, unknown>)[name] === true);
+    if (state.length > 0) out.state = state;
     return out;
   });
 
@@ -92,31 +100,49 @@ export function toPromptInput(request: GuideRequest): { input: GuidePromptInput;
 const truncate = (text: string, max: number): string =>
   text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 
+/** 요소 번호 → 그 요소의 글자 (t, 없으면 d). 응답의 targetText 에 쓴다. */
+export type NodeTexts = ReadonlyMap<number, string>;
+
+export function nodeTexts(request: GuideRequest): Map<number, string> {
+  return new Map(request.screen.nodes.map((node) => [node.i, node.t ?? node.d ?? ""]));
+}
+
+const cleanText = (text: string | null | undefined): string | undefined => {
+  const value = truncate(maskText((text ?? "").trim()).text, TARGET_TEXT_MAX);
+  return value === "" ? undefined : value;
+};
+
 /** 모델 출력이 지금 화면과 규칙에 맞는지 확인한다. 맞지 않으면 say 로 낮춘다. */
 export function finalize(
   requestId: number,
   output: GuideModelOutput,
-  nodeIds: ReadonlySet<number>,
+  nodes: NodeTexts,
 ): GuideResponse {
   const say = truncate(maskText(output.say.trim()).text, SAY_MAX);
   const fallback: GuideResponse = { requestId, type: "say", say: FALLBACK_SAY.unsure };
   if (say === "") return fallback;
+  const withTarget = (target: number) => {
+    const targetText = cleanText(nodes.get(target));
+    return targetText === undefined ? { target } : { target, targetText };
+  };
 
   switch (output.type) {
     case "highlight":
-      if (output.target === null || !nodeIds.has(output.target)) return fallback;
-      return { requestId, type: "highlight", say, target: output.target };
+      if (output.target === null || !nodes.has(output.target)) return fallback;
+      return { requestId, type: "highlight", say, ...withTarget(output.target) };
     case "suggest": {
-      if (output.target === null || !nodeIds.has(output.target)) return fallback;
+      if (output.target === null || !nodes.has(output.target)) return fallback;
       const chips = (output.chips ?? [])
         .map((chip) => truncate(maskText(chip.trim()).text, CHIP_MAX))
         .filter((chip) => chip !== "" && !chip.includes("***"))
         .slice(0, CHIPS_MAX);
-      return { requestId, type: "suggest", say, target: output.target, chips };
+      return { requestId, type: "suggest", say, ...withTarget(output.target), chips };
     }
-    case "swipe":
+    case "swipe": {
       if (output.dir === null) return fallback;
-      return { requestId, type: "swipe", say, dir: output.dir };
+      const seekText = cleanText(output.seek);
+      return { requestId, type: "swipe", say, dir: output.dir, ...(seekText ? { seekText } : {}) };
+    }
     case "ask":
     case "say":
     case "done":
@@ -132,10 +158,6 @@ export async function guide(
   const { requestId } = request;
   const say = (text: string): GuideResponse => ({ requestId, type: "say", say: text });
 
-  if (request.goal.toUpperCase() === "BANK") {
-    log.info("guide skipped", { reason: "bank-goal" });
-    return say(FALLBACK_SAY.bank);
-  }
   if (isSecretScreen(request)) {
     log.info("guide skipped", { reason: "secret-screen", pkg: request.screen.pkg });
     return say(FALLBACK_SAY.secret);
@@ -151,11 +173,13 @@ export async function guide(
     return say(FALLBACK_SAY.busy);
   }
 
-  const nodeIds = new Set(request.screen.nodes.map((node) => node.i));
   const response =
-    result.status === "ok" ? finalize(requestId, result.output, nodeIds) : say(FALLBACK_SAY.unsure);
+    result.status === "ok"
+      ? finalize(requestId, result.output, nodeTexts(request))
+      : say(FALLBACK_SAY.unsure);
 
   log.info("guide completed", {
+    promptVersion: GUIDE_PROMPT_VERSION,
     goal: request.goal,
     pkg: request.screen.pkg,
     nodeCount: request.screen.nodes.length,

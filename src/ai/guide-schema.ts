@@ -32,6 +32,8 @@ export const guideModelOutputSchema = z.object({
   target: z.number().int().nullable(),
   chips: z.array(z.string()).nullable(),
   dir: z.enum(SWIPE_DIRS).nullable(),
+  /** swipe 일 때 밀어서 찾으려는 요소의 글자 (예: "디스플레이"). 모르면 null. */
+  seek: z.string().nullable(),
 });
 
 export type GuideModelOutput = z.output<typeof guideModelOutputSchema>;
@@ -44,4 +46,8 @@ export interface GuideResponse {
   target?: number;
   chips?: string[];
   dir?: (typeof SWIPE_DIRS)[number];
+  /** highlight·suggest: 가리킨 요소의 글자(t, 없으면 d). 스크롤로 번호가 바뀌어도 다시 찾기 위함. */
+  targetText?: string;
+  /** swipe: 밀어서 찾으려는 요소의 글자. 화면에 나타나면 앱이 바로 누르기 안내로 바꿀 수 있다. */
+  seekText?: string;
 }

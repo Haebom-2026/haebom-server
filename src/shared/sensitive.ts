@@ -18,6 +18,8 @@ const PATTERNS: readonly RegExp[] = [
   /(?<!\d)\d{10,14}(?!\d)/g,
   // 금액 표현
   /\d[\d,]*\s?원/g,
+  // "원" 없이 쉼표로 묶인 금액·잔액 (1,234 이상, 은행 화면에 흔함)
+  /(?<![\d,])\d{1,3}(?:,\d{3})+(?![\d,])/g,
 ];
 
 const digitCount = (value: string): number => value.replace(/\D/g, "").length;
