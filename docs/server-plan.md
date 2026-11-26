@@ -129,20 +129,20 @@
 
 **`haebom-main`** — PK `PK`, SK `SK`, GSI1(`GSI1PK`,`GSI1SK`), GSI2(`GSI2PK`,`GSI2SK`, sparse), TTL `ttl`, Streams on (NEW_AND_OLD_IMAGES)
 
-| 엔티티                 | PK               | SK                           | GSI1                                   | GSI2                                       | 주요 속성                                                                           |
-| ---------------------- | ---------------- | ---------------------------- | -------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| 사용자                 | `USER#<uid>`     | `PROFILE`                    | –                                      | –                                          | role, name, createdAt                                                               |
-| 기기                   | `USER#<uid>`     | `DEVICE#<deviceId>`          | –                                      | –                                          | fcmToken, platform, updatedAt                                                       |
-| 연결                   | `ELDER#<eid>`    | `LINK#<gid>`                 | `GUARDIAN#<gid>` / `LINK#<eid>`        | –                                          | elderName, guardianName, relationship, connectedAt                                  |
-| 연결 코드              | `CODE#<6자리>`   | `CODE`                       | –                                      | –                                          | elderId, expiresAt, used, ttl                                                       |
-| 현재 코드 포인터       | `ELDER#<eid>`    | `ACTIVECODE`                 | –                                      | –                                          | code (새 발급 시 이전 코드 무효화)                                                  |
-| 알림 (원본)            | `ELDER#<eid>`    | `NOTI#<ts>#<nid>`            | –                                      | –                                          | type, appName, packageName, level, category, reason, guardianIds                    |
-| 알림함 (보호자별 복사) | `GUARDIAN#<gid>` | `NOTI#<ts>#<nid>`            | –                                      | –                                          | 위 요약 + elderId, elderName, readAt                                                |
-| 중복 방지 표식         | `ELDER#<eid>`    | `DEDUP#<packageName>`        | –                                      | –                                          | until(=+10분), ttl                                                                  |
-| 승인                   | `APPROVAL#<aid>` | `META`                       | `ELDER#<eid>` / `APPROVAL#<createdAt>` | `PENDING` / `<expiresAt>` (pending일 때만) | action, appName, category, status, guardianIds, expiresAt, respondedAt, respondedBy |
-| 승인 보호자 인덱스     | `GUARDIAN#<gid>` | `APPROVAL#<createdAt>#<aid>` | –                                      | –                                          | aid, 요약 (상태는 원본 조회)                                                        |
-| pending 잠금           | `ELDER#<eid>`    | `PENDING#<action>`           | –                                      | –                                          | aid (승인 중복 방지, 상태 변경 시 삭제)                                             |
-| AI 사용량              | `ELDER#<eid>`    | `USAGE#<yyyy-mm-dd>`         | –                                      | –                                          | guideCalls, classifyCalls, inTokens, outTokens, ttl(+35일)                          |
+| 엔티티                 | PK               | SK                           | GSI1                                   | GSI2                                       | 주요 속성                                                                                            |
+| ---------------------- | ---------------- | ---------------------------- | -------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 사용자                 | `USER#<uid>`     | `PROFILE`                    | –                                      | –                                          | role, name, createdAt                                                                                |
+| 기기                   | `USER#<uid>`     | `DEVICE#<deviceId>`          | –                                      | –                                          | fcmToken, platform, updatedAt                                                                        |
+| 연결                   | `ELDER#<eid>`    | `LINK#<gid>`                 | `GUARDIAN#<gid>` / `LINK#<eid>`        | –                                          | elderName, guardianName, elderLabel, guardianLabel, connectedAt (S1 반영, relationship 은 쓰지 않음) |
+| 연결 코드              | `CODE#<6자리>`   | `CODE`                       | –                                      | –                                          | elderId, expiresAt, used, ttl                                                                        |
+| 현재 코드 포인터       | `ELDER#<eid>`    | `ACTIVECODE`                 | –                                      | –                                          | code. 연결할 때 이 값과 다른 코드는 거부 → 새 발급 시 이전 코드 자동 무효                            |
+| 알림 (원본)            | `ELDER#<eid>`    | `NOTI#<ts>#<nid>`            | –                                      | –                                          | type, appName, packageName, level, category, reason, guardianIds                                     |
+| 알림함 (보호자별 복사) | `GUARDIAN#<gid>` | `NOTI#<ts>#<nid>`            | –                                      | –                                          | 위 요약 + elderId, elderName, readAt                                                                 |
+| 중복 방지 표식         | `ELDER#<eid>`    | `DEDUP#<packageName>`        | –                                      | –                                          | until(=+10분), ttl                                                                                   |
+| 승인                   | `APPROVAL#<aid>` | `META`                       | `ELDER#<eid>` / `APPROVAL#<createdAt>` | `PENDING` / `<expiresAt>` (pending일 때만) | action, appName, category, status, guardianIds, expiresAt, respondedAt, respondedBy                  |
+| 승인 보호자 인덱스     | `GUARDIAN#<gid>` | `APPROVAL#<createdAt>#<aid>` | –                                      | –                                          | aid, 요약 (상태는 원본 조회)                                                                         |
+| pending 잠금           | `ELDER#<eid>`    | `PENDING#<action>`           | –                                      | –                                          | aid (승인 중복 방지, 상태 변경 시 삭제)                                                              |
+| AI 사용량              | `ELDER#<eid>`    | `USAGE#<yyyy-mm-dd>`         | –                                      | –                                          | guideCalls, classifyCalls, inTokens, outTokens, ttl(+35일)                                           |
 
 설계 메모:
 
@@ -181,25 +181,25 @@
 
 ### 4.2 지침서 엔드포인트 (#1~#17)
 
-| #   | 메서드 · 경로                            | Lambda | 메모                                                                      |
-| --- | ---------------------------------------- | ------ | ------------------------------------------------------------------------- |
-| 1   | GET /v1/healthz                          | api-fn | 인증 없음                                                                 |
-| 2   | POST /v1/users/me                        | api-fn | role, name. 이미 있으면 role 변경 불가(409)                               |
-| 3   | PATCH /v1/users/me                       | api-fn | name. 연결 항목의 elderName/guardianName도 갱신                           |
-| 4   | PUT /v1/devices/{deviceId}               | api-fn | fcmToken, platform                                                        |
-| 5   | DELETE /v1/devices/{deviceId}            | api-fn |                                                                           |
-| 6   | POST /v1/elder/sensitive-entries         | api-fn | created / duplicate_suppressed / no_guardians. level·category·reason 수용 |
-| 7   | POST /v1/elder/stuck                     | api-fn | 중복 방지 없음                                                            |
-| 8   | POST /v1/elder/sos                       | api-fn | 중복 방지 없음. category·reason 선택 필드 수용                            |
-| 9   | POST /v1/elder/approvals                 | api-fn | action 6종 수용. 같은 action pending이면 기존 approvalId 반환             |
-| 10  | POST /v1/elder/approvals/{id}/cancel     | api-fn | pending만, 아니면 409                                                     |
-| 11  | POST /v1/elder/connect-codes             | api-fn | 6자리, 10분, 일회용, 이전 코드 무효                                       |
-| 12  | DELETE /v1/elder/links/{guardianId}      | api-fn |                                                                           |
-| 13  | POST /v1/guardian/approvals/{id}/respond | api-fn | `{decision: approved                                                      | rejected}`. pending & 만료 전만 |
-| 14  | POST /v1/guardian/links                  | api-fn | `{code, relationship}`. 실패 reason: `code-invalid`                       |
-| 15  | DELETE /v1/guardian/links/{elderId}      | api-fn |                                                                           |
-| 16  | POST /v1/elder/guide                     | ai-fn  | 5장                                                                       |
-| 17  | POST /v1/elder/classify                  | ai-fn  | 5장                                                                       |
+| #   | 메서드 · 경로                            | Lambda | 메모                                                                                             |
+| --- | ---------------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| 1   | GET /v1/healthz                          | api-fn | 인증 없음                                                                                        |
+| 2   | POST /v1/users/me                        | api-fn | role, name. 이미 있으면 role 변경 불가(409)                                                      |
+| 3   | PATCH /v1/users/me                       | api-fn | name. 연결 항목의 elderName/guardianName도 갱신                                                  |
+| 4   | PUT /v1/devices/{deviceId}               | api-fn | fcmToken, platform                                                                               |
+| 5   | DELETE /v1/devices/{deviceId}            | api-fn |                                                                                                  |
+| 6   | POST /v1/elder/sensitive-entries         | api-fn | created / duplicate_suppressed / no_guardians. level·category·reason 수용                        |
+| 7   | POST /v1/elder/stuck                     | api-fn | 중복 방지 없음                                                                                   |
+| 8   | POST /v1/elder/sos                       | api-fn | 중복 방지 없음. category·reason 선택 필드 수용                                                   |
+| 9   | POST /v1/elder/approvals                 | api-fn | action 6종 수용. 같은 action pending이면 기존 approvalId 반환                                    |
+| 10  | POST /v1/elder/approvals/{id}/cancel     | api-fn | pending만, 아니면 409                                                                            |
+| 11  | POST /v1/elder/connect-codes             | api-fn | 6자리, 10분, 일회용, 이전 코드 무효                                                              |
+| 12  | DELETE /v1/elder/links/{guardianId}      | api-fn | 204. 없으면 404 not-found (S1 구현)                                                              |
+| 13  | POST /v1/guardian/approvals/{id}/respond | api-fn | `{decision: approved                                                                             | rejected}`. pending & 만료 전만 |
+| 14  | POST /v1/guardian/links                  | api-fn | `{code, elderLabel, guardianLabel}`, Idempotency-Key. reason 은 [S1 문서](api/s1-users-links.md) |
+| 15  | DELETE /v1/guardian/links/{elderId}      | api-fn |                                                                                                  |
+| 16  | POST /v1/elder/guide                     | ai-fn  | 5장                                                                                              |
+| 17  | POST /v1/elder/classify                  | ai-fn  | 5장                                                                                              |
 
 #13~#15 경로는 지침서에서 `SERVER_API.md` 로 미정이었으므로 위 경로를 **제안**한다.
 
@@ -217,12 +217,13 @@
 
 ### 4.4 실시간성 대체 방식
 
-| 상황                      | 방식                                                                                                         | 지침서 요구                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| 보호자에게 알림·승인 요청 | push-fn이 FCM 알림 발송 (우선순위는 지침서 8.3) → 앱은 탭/수신 시 #21·#23 조회                               | 8.3                             |
-| 고령자에게 승인 결과      | 승인 상태 변경 → Streams → push-fn이 **고령자 기기에 FCM data 메시지**(high priority) `{approvalId, status}` | "승인 → 2.5초 안에 이어서 안내" |
-| FCM 누락 대비             | 고령자 앱은 대기 중 **3초 간격으로 #19 폴링** (최대 5분 ≈ 100회, 비용 무시 가능)                             | 5.5                             |
-| 보호자 앱이 켜진 상태     | 화면 진입·포그라운드 복귀 시 조회 + FCM 수신 시 갱신                                                         |                                 |
+| 상황                      | 방식                                                                                                                                | 지침서 요구                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 보호자에게 알림·승인 요청 | push-fn이 FCM 알림 발송 (우선순위는 지침서 8.3) → 앱은 탭/수신 시 #21·#23 조회                                                      | 8.3                             |
+| 고령자에게 승인 결과      | 승인 상태 변경 → Streams → push-fn이 **고령자 기기에 FCM data 메시지**(high priority) `{approvalId, status}`                        | "승인 → 2.5초 안에 이어서 안내" |
+| 연결 생성·해제 (S1)       | 연결 항목 Streams → push-fn이 어르신·보호자 모든 기기에 FCM data `{kind:"link", change, elderId, guardianId}` → 앱은 #18·#20 재조회 | 두 앱 요청                      |
+| FCM 누락 대비             | 고령자 앱은 대기 중 **3초 간격으로 #19 폴링** (최대 5분 ≈ 100회, 비용 무시 가능)                                                    | 5.5                             |
+| 보호자 앱이 켜진 상태     | 화면 진입·포그라운드 복귀 시 조회 + FCM 수신 시 갱신                                                                                |                                 |
 
 WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 작아 **1차에서는 제외**. 보호자 앱에 실시간 대시보드가 필요해지면 재검토.
 
@@ -299,19 +300,19 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 
 ## 6. 처리 규칙 상세 (지침서 9.2 → 구현)
 
-| 항목                 | 구현                                                                                                                 |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| 보호자 결정          | `ELDER#<eid>` / `LINK#*` Query → guardianIds. 0명이면 `no_guardians`, 아무것도 쓰지 않음                             |
-| sensitive_entry 중복 | `DEDUP#<pkg>` 조건부 Put + 원본 + 알림함 N개를 TransactWriteItems (최대 100개라 충분)                                |
-| SOS·stuck            | 중복 방지 없음. 원본 + 알림함 트랜잭션                                                                               |
-| Idempotency          | `haebom-idem` 조건부 Put. 같은 키 + 진행 중이면 409 `in-progress` 대신 짧게 대기 후 결과 반환(협의)                  |
-| 승인 생성            | `PENDING#<action>` 조건부 Put 성공 시 새 승인, 실패 시 기존 aid 조회 → lazy 만료 확인 후 살아 있으면 반환            |
-| 승인 응답 #13        | `status = pending AND expiresAt > now AND contains(guardianIds, :me)` 조건부 Update, 성공 시 `PENDING#<action>` 삭제 |
-| 승인 취소 #10        | `status = pending` 조건부 Update                                                                                     |
-| 만료                 | expire-fn: GSI2 Query → 각 항목 조건부 Update(expired), GSI2 속성 제거                                               |
-| 연결 코드 #11        | 6자리 난수(crypto) → `CODE#` 조건부 Put, `ACTIVECODE` 갱신, 이전 코드 used=true                                      |
-| 코드로 연결 #14      | `CODE#` 조건부 Update(used=false, 만료 전) → links 생성(트랜잭션). 브루트포스 방지: 보호자당 10분 5회 실패 시 429    |
-| 연결 해제 #12·#15    | links 삭제. 기존 알림함은 남김(협의)                                                                                 |
+| 항목                 | 구현                                                                                                                                                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 보호자 결정          | `ELDER#<eid>` / `LINK#*` Query → guardianIds. 0명이면 `no_guardians`, 아무것도 쓰지 않음                                                                         |
+| sensitive_entry 중복 | `DEDUP#<pkg>` 조건부 Put + 원본 + 알림함 N개를 TransactWriteItems (최대 100개라 충분)                                                                            |
+| SOS·stuck            | 중복 방지 없음. 원본 + 알림함 트랜잭션                                                                                                                           |
+| Idempotency          | `haebom-idem` 조건부 Put. 같은 키 + 진행 중이면 409 `in-progress` 대신 짧게 대기 후 결과 반환(협의)                                                              |
+| 승인 생성            | `PENDING#<action>` 조건부 Put 성공 시 새 승인, 실패 시 기존 aid 조회 → lazy 만료 확인 후 살아 있으면 반환                                                        |
+| 승인 응답 #13        | `status = pending AND expiresAt > now AND contains(guardianIds, :me)` 조건부 Update, 성공 시 `PENDING#<action>` 삭제                                             |
+| 승인 취소 #10        | `status = pending` 조건부 Update                                                                                                                                 |
+| 만료                 | expire-fn: GSI2 Query → 각 항목 조건부 Update(expired), GSI2 속성 제거                                                                                           |
+| 연결 코드 #11        | 6자리 난수(crypto) → `CODE#` 조건부 Put(없거나 만료됨), `ACTIVECODE` 갱신 (트랜잭션)                                                                             |
+| 코드로 연결 #14      | 트랜잭션: `CODE#` 조건부 Update(미사용·만료 전) + `ACTIVECODE` 일치 확인 + links 생성. 입력 제한: 보호자당 10분 5회, 전체 1분 60회 실패 시 429 too-many-attempts |
+| 연결 해제 #12·#15    | links 삭제. S2·S3: 그 보호자 알림함의 해당 어르신 항목 정리, 남은 보호자 없는 pending 승인 cancelled (두 앱 요청)                                                |
 
 ---
 
@@ -365,17 +366,17 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 
 ## 10. 개발 단계 (서버 기준)
 
-| 단계 | 내용                                                                                                                                                     | 앱 연동 시점       |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| S0   | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포 | –                  |
-| S0.5 | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
-| S1   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20)                                                                                       | 앱 2단계 전환 시작 |
-| S2   | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency                                                                                               | 시연 SOS·정부24 L1 |
-| S3   | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
-| S4   | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
-| S5   | AI #16 guide (target 검증, 거부 규칙, 대체 응답)                                                                                                         | 서버 AI 안내       |
-| S6   | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
-| S7   | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
+| 단계  | 내용                                                                                                                                                     | 앱 연동 시점       |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| S0    | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포 | –                  |
+| S0.5  | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
+| S1 ✅ | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
+| S2    | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency                                                                                               | 시연 SOS·정부24 L1 |
+| S3    | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
+| S4    | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
+| S5    | AI #16 guide (target 검증, 거부 규칙, 대체 응답)                                                                                                         | 서버 AI 안내       |
+| S6    | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
+| S7    | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
 
 S1~S3은 지침서 1단계에서 앱끼리 검증한 문서 모양을 그대로 응답 스키마로 쓰므로, **앱 1단계가 끝나는 대로** 5.8 규격을 받아 확정한다.
 
