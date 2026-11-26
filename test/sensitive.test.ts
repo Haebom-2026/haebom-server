@@ -18,6 +18,19 @@ describe("maskText", () => {
     expect(maskText(input)).toEqual({ text: input, count: 0 });
   });
 
+  it("이름표가 붙은 인증번호·비밀번호는 짧아도 가린다 (이름표는 남김)", () => {
+    expect(maskText("인증번호 123456을 입력해 줘").text).toBe("인증번호 ***을 입력해 줘");
+    expect(maskText("비밀번호는 1234야").text).toBe("비밀번호는 ***야");
+    expect(maskText("OTP: 987 654 넣어").text).toBe("OTP: *** 넣어");
+    expect(maskText("보안카드 번호 12-34").text).toBe("보안카드 번호 ***");
+    // 길이 제한 없이 숫자열 전체 (부분 노출 없음), 짧은 번호·"는:" 표기도
+    expect(maskText("비밀번호 12345678901234").text).toBe("비밀번호 ***");
+    expect(maskText("보안카드 번호 12").text).toBe("보안카드 번호 ***");
+    expect(maskText("인증번호는: 123456").text).toBe("인증번호는: ***");
+    // 이름표가 없으면 짧은 숫자는 그대로
+    expect(maskText("알림 1234개").text).toBe("알림 1234개");
+  });
+
   it("원 없이 쉼표로 묶인 금액도 가린다", () => {
     expect(maskText("잔액 1,234,567 / 출금 12,000").text).toBe("잔액 *** / 출금 ***");
     expect(maskText("1,000원 미만 999개").text).toBe("*** 미만 999개");

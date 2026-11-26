@@ -1,17 +1,23 @@
+import { claudeClassifyModel } from "../../ai/classify-model.js";
 import { claudeGuideModel } from "../../ai/guide-model.js";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createProfileGuard } from "../../core/profile.js";
 import { createAwsDebugStore } from "../../debug/aws-store.js";
 import { createGuideTraceRecorder } from "../../debug/guide-trace.js";
+import { createAwsCommandStore } from "../../route/command-store.js";
+import { createJevClient } from "../../route/jev.js";
+import { parseMap } from "../../route/map.js";
+import { SEED_MAP } from "../../route/seed-map.js";
+import { createRouteSelector } from "../../route/select.js";
 import { createHttpHandler } from "../../shared/handler.js";
 import { createLogger } from "../../shared/logger.js";
 import { createRouter } from "../../shared/router.js";
+import { createSecretLoader } from "../../shared/secrets.js";
+import { createChooseAppRoute, createClassifyRoute } from "./routes/classify.js";
 import { createGuideRoute } from "./routes/guide.js";
-import { notImplemented } from "./routes/not-implemented.js";
 
-const profiles = createProfileGuard(
-  createAwsCoreStore(process.env.TABLE_MAIN ?? "haebom-local-main"),
-);
+const table = process.env.TABLE_MAIN ?? "haebom-local-main";
+const profiles = createProfileGuard(createAwsCoreStore(table));
 
 /** dev 에만 디버그 저장소가 있다 (infra/envs/dev 가 DEBUG_TABLE·DEBUG_BUCKET 을 넘김). prod 는 기록하지 않는다. */
 const debugTable = process.env.DEBUG_TABLE;
@@ -21,7 +27,26 @@ const recorder =
     ? createGuideTraceRecorder(createAwsDebugStore({ table: debugTable, bucket: debugBucket }))
     : undefined;
 
-/** ai-fn: #16 guide, #17 classify. */
+/**
+ * jev 앱·목표 고르기 (docs/jev-routing-plan.md). ROUTE_ENABLED=true 이고 키 비밀 이름이 있을 때만.
+ * 꺼져 있으면 classify 는 안전 분류만 한다. 지도는 아직 저장소 seed (R3 에서 스냅샷으로).
+ */
+const openRouterSecret = process.env.OPENROUTER_SECRET_ID;
+const selector =
+  process.env.ROUTE_ENABLED === "true" && openRouterSecret
+    ? createRouteSelector({
+        jev: createJevClient({ apiKey: createSecretLoader(openRouterSecret) }),
+        map: parseMap(SEED_MAP),
+      })
+    : undefined;
+
+const classifyDeps = {
+  model: claudeClassifyModel,
+  selector,
+  commands: createAwsCommandStore(table),
+};
+
+/** ai-fn: #16 guide, #17 classify, 앱 선택. */
 export const router = createRouter([
   {
     method: "POST",
@@ -31,7 +56,16 @@ export const router = createRouter([
       modelName: process.env.ANTHROPIC_MODEL,
     }),
   },
-  { method: "POST", path: "/v1/elder/classify", handler: notImplemented },
+  {
+    method: "POST",
+    path: "/v1/elder/classify",
+    handler: createClassifyRoute(profiles, classifyDeps),
+  },
+  {
+    method: "POST",
+    path: "/v1/elder/commands/{commandId}/app",
+    handler: createChooseAppRoute(profiles, classifyDeps),
+  },
 ]);
 
 export const handler = createHttpHandler(router, createLogger({ service: "ai" }));

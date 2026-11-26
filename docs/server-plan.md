@@ -370,17 +370,17 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 
 ## 10. 개발 단계 (서버 기준)
 
-| 단계    | 내용                                                                                                                                                     | 앱 연동 시점       |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| S0 ✅   | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포 | –                  |
-| S0.5 ✅ | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                | 앱 디버그 모드     |
-| S1 ✅   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)             | 앱 2단계 전환 시작 |
-| S2 ✅   | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency. 계약: [docs/api/s2-notifications.md](api/s2-notifications.md)                                | 시연 SOS·정부24 L1 |
-| S3 ✅   | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn. 계약: [docs/api/s3-approvals.md](api/s3-approvals.md)                                        | 시연 정부24 L2     |
-| S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트). jev 앱·목표 라우팅 포함: [기획](jev-routing-plan.md) R2                                              | 시연 사기 의심 L3  |
-| S5 ✅   | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |
-| S6      | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
-| S7      | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
+| 단계    | 내용                                                                                                                                                             | 앱 연동 시점       |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| S0 ✅   | TS 프로젝트 골격(11.1), Terraform bootstrap(state 버킷·OIDC) + dev 환경(DynamoDB, API Gateway + JWT Authorizer, api-fn healthz), Secrets 껍데기, CI 배포         | –                  |
+| S0.5 ✅ | **디버그 뷰어** (12장): debug-fn + heartbeat·기기 목록 → 화면 저장·서버 지문 → 뷰어(1초 폴링) → 보관 세션                                                        | 앱 디버그 모드     |
+| S1 ✅   | users·devices(#2~#5), 연결 코드·연결·해제(#11·#12·#14·#15·#18·#20), 연결 변경 FCM. 계약: [docs/api/s1-users-links.md](api/s1-users-links.md)                     | 앱 2단계 전환 시작 |
+| S2 ✅   | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency. 계약: [docs/api/s2-notifications.md](api/s2-notifications.md)                                        | 시연 SOS·정부24 L1 |
+| S3 ✅   | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn. 계약: [docs/api/s3-approvals.md](api/s3-approvals.md)                                                | 시연 정부24 L2     |
+| S4      | AI #17 classify (구조화 출력, max 보정, 회귀 세트). jev 앱·목표 라우팅 포함: [기획](jev-routing-plan.md) R2. 계약: [docs/api/s4-classify.md](api/s4-classify.md) | 시연 사기 의심 L3  |
+| S5 ✅   | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                                  | 서버 AI 안내       |
+| S6      | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                                   | –                  |
+| S7      | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                            | 시연 전            |
 
 S1~S3은 지침서 1단계에서 앱끼리 검증한 문서 모양을 그대로 응답 스키마로 쓰므로, **앱 1단계가 끝나는 대로** 5.8 규격을 받아 확정한다.
 

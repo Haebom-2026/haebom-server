@@ -262,6 +262,40 @@ export function judgeApp(
   return fail("low");
 }
 
+/**
+ * 하려는 일 질문에 어르신이 역할을 골랐을 때: 그 역할 앱을 선호 → 기본 앱 → 확률 순으로 (4.3).
+ * 지도에 없는 역할이면 실패.
+ */
+export function judgeRole(
+  m: IndexedMap,
+  probs: Record<string, number>,
+  roleId: string,
+  prefs: Readonly<Record<string, string>> = {},
+): AppJudgement {
+  const role = m.roles.get(roleId);
+  const members = m.map.apps.filter((a) => a.roles.includes(roleId));
+  if (!role || members.length === 0) {
+    return { kind: "fail", reason: "low", confidence: { app: 0, role: 0 } };
+  }
+  const probOf = (id: string) => probs[id] ?? 0;
+  const rank = (appId: string): [number, CandidateBy] =>
+    prefs[roleId] === appId ? [0, "pref"] : role.defaultApp === appId ? [1, "default"] : [2, "jev"];
+  const candidates = members
+    .map((a) => ({ appId: a.id, rank: rank(a.id) }))
+    .sort((a, b) => a.rank[0] - b.rank[0] || probOf(b.appId) - probOf(a.appId))
+    .slice(0, ROUTE_THRESHOLDS.maxCandidates)
+    .map(({ appId, rank: [, by] }) => ({ appId, by }));
+  return {
+    kind: "candidates",
+    role: roleId,
+    named: false,
+    exclusive: false,
+    ask: role.sensitive,
+    candidates,
+    confidence: { app: 0, role: 1 },
+  };
+}
+
 /** 다른 앱을 깔기·업데이트·지우는 역할 (3.4) */
 export const APPSTORE_ROLE = "appstore";
 

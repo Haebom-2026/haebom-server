@@ -16,6 +16,7 @@ import {
   goalQuestion,
   judgeApp,
   judgeGoal,
+  judgeRole,
   type AppJudgement,
   type CandidateBy,
 } from "./decide.js";
@@ -36,10 +37,18 @@ export interface RouteGoal {
 }
 
 /** 어르신께 물을 것. 답은 앱 선택 API 로 (5.2) */
+export interface RouteClarifyOption {
+  id: string;
+  name: string;
+  /** 목표 질문일 때: 그 목표의 단계와 검증 여부 (서버가 단계를 올릴 때만 씀) */
+  level?: Level;
+  verified?: boolean;
+}
+
 export interface RouteClarify {
   questionId: string;
   say: string;
-  options: { id: string; name: string }[];
+  options: RouteClarifyOption[];
 }
 
 export interface RouteCandidate {
@@ -80,6 +89,8 @@ export interface RouteSelector {
   select(input: {
     utterance: string;
     prefs?: Readonly<Record<string, string>>;
+    /** 하려는 일 질문의 답 (역할 id). 있으면 1단계 판정 대신 이 역할의 앱으로 */
+    role?: string;
   }): Promise<RouteSelection>;
 }
 
@@ -94,7 +105,7 @@ export function createRouteSelector(deps: {
   const m = deps.map;
 
   return {
-    async select({ utterance, prefs }) {
+    async select({ utterance, prefs, role }) {
       const started = now();
       const left = () => budget - (now() - started);
       let cost = 0;
@@ -107,7 +118,10 @@ export function createRouteSelector(deps: {
       const appAnswer = first.answers.app;
       if (!appAnswer) return { ...base(), kind: "fail", reason: "jev_invalid" };
 
-      const judged: AppJudgement = judgeApp(m, appAnswer.probabilities, utterance, prefs);
+      const judged: AppJudgement =
+        role === undefined
+          ? judgeApp(m, appAnswer.probabilities, utterance, prefs)
+          : judgeRole(m, appAnswer.probabilities, role, prefs);
       if (judged.kind === "fail") {
         return { ...base(), kind: "fail", reason: judged.reason, confidence: judged.confidence };
       }
@@ -179,7 +193,9 @@ export function createRouteSelector(deps: {
           if (goal.kind === "ask") {
             const options = goal.keys.flatMap((key) => {
               const g = gq.goals.get(key);
-              return g ? [{ id: g.id, name: g.name }] : [];
+              return g
+                ? [{ id: g.id, name: g.name, level: g.level, verified: g.status === "verified" }]
+                : [];
             });
             // 물을 때는 두 목표 중 높은 민감도로 본다
             const levels = goal.keys.map((key) => gq.goals.get(key)?.level ?? app.level);

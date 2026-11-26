@@ -14,9 +14,10 @@ module "http_api" {
 
   # 더 구체적인 라우트가 {proxy+} 보다 우선한다.
   routes = {
-    "GET /v1/healthz"         = { function = "api", auth = false }
-    "ANY /v1/{proxy+}"        = { function = "api", auth = true }
-    "POST /v1/elder/guide"    = { function = "ai", auth = true }
-    "POST /v1/elder/classify" = { function = "ai", auth = true }
+    "GET /v1/healthz"                         = { function = "api", auth = false }
+    "ANY /v1/{proxy+}"                        = { function = "api", auth = true }
+    "POST /v1/elder/guide"                    = { function = "ai", auth = true }
+    "POST /v1/elder/classify"                 = { function = "ai", auth = true }
+    "POST /v1/elder/commands/{commandId}/app" = { function = "ai", auth = true }
   }
 }
