@@ -51,8 +51,10 @@ export function createGuideTraceRecorder(
   };
 
   return {
-    async record({ uid, request, response, trace, model, receivedAt, deviceId }) {
+    async record({ uid, request, response: sent, trace, model, receivedAt, deviceId }) {
       const device = await resolveDevice(uid, deviceId);
+      // 앱에 보낸 응답에는 어르신이 말한 번호가 되돌려져 있을 수 있다 (typeText). 저장할 때는 가린다
+      const response = maskDeep(sent).value;
       const masked = maskDeep(request.screen.nodes);
       const screen = { ...request.screen, nodes: masked.value };
       const screenId = newScreenId(receivedAt, randomBytes(3).toString("hex"));

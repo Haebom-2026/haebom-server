@@ -8,6 +8,13 @@ import type { GuideModelOutput, GuideRequest, GuideResponse } from "./guide-sche
 import { maskDeep, maskText } from "../shared/sensitive.js";
 import type { Logger } from "../shared/logger.js";
 import { GUIDE_PROMPT_VERSION } from "./prompts/guide.js";
+import {
+  extractPhones,
+  isPhoneField,
+  restorePhones,
+  speakPhones,
+  type PhoneSlots,
+} from "./phone-slots.js";
 
 export const SAY_MAX = 80;
 export const CHIPS_MAX = 4;
@@ -107,7 +114,7 @@ export function todayInSeoul(now: Date): string {
 export function toPromptInput(
   request: GuideRequest,
   now: Date = new Date(),
-): { input: GuidePromptInput; masked: number } {
+): { input: GuidePromptInput; masked: number; phones: PhoneSlots } {
   const { width, height } = request.screen;
   const nodes: PromptNode[] = request.screen.nodes.map((node) => {
     const out: PromptNode = { i: node.i };
@@ -124,17 +131,25 @@ export function toPromptInput(
     return out;
   });
 
-  const { value, count } = maskDeep({
-    goal: request.goal,
+  // 어르신이 직접 말한 전화번호는 *** 대신 [번호N] 으로 (번호 칸에 넣어 드리려고). 화면 글자는 대상 아님
+  const spoken = extractPhones({
     utterance: request.utterance,
     slots: request.slots,
     history: request.history,
     user_reply: request.userReply,
+  });
+  const { value, count } = maskDeep({
+    goal: request.goal,
+    ...spoken.value,
     mode: request.mode,
     screen: { pkg: request.screen.pkg, nodes },
   });
   // today 는 마스킹하지 않는다 (날짜가 숫자 개인정보로 가려지지 않게)
-  return { input: { ...value, today: todayInSeoul(now) }, masked: count };
+  return {
+    input: { ...value, today: todayInSeoul(now) },
+    masked: count + spoken.phones.size,
+    phones: spoken.phones,
+  };
 }
 
 const truncate = (text: string, max: number): string =>
@@ -202,13 +217,22 @@ const cleanList = (items: readonly string[], max: number, each: number): string[
  * 모델 출력(guide@v4)을 앱 응답으로 바꾸고, 지금 화면과 규칙에 맞는지 확인한다.
  * 맞지 않으면 say 로 낮춘다. type 값은 v3 와 같게 두고 v4 정보는 새 필드로 붙인다 (하위 호환).
  */
+export interface FinalizeContext {
+  /** 입력 칸(editable) 요소 번호 */
+  editable?: ReadonlySet<number>;
+  /** 어르신이 말한 전화번호 자리표시 → 번호 */
+  phones?: PhoneSlots;
+  /** 앱이 알려 준 입력 상태 (slots.state, 예: "입력 중: 전화번호"). 칸 글자가 없을 때 번호 칸 판단에 씀 */
+  inputState?: string;
+}
+
 export function finalize(
   requestId: number,
   output: GuideModelOutput,
   nodes: NodeTexts,
-  editable: ReadonlySet<number> = new Set(),
+  { editable = new Set(), phones = new Map(), inputState }: FinalizeContext = {},
 ): GuideResponse {
-  const say = truncate(maskText(output.speech.trim()).text, SAY_MAX);
+  const say = truncate(maskText(speakPhones(output.speech.trim())).text, SAY_MAX);
   const fallback: GuideResponse = { requestId, type: "say", say: FALLBACK_SAY.unsure };
   if (say === "") return fallback;
   const { status, action } = output;
@@ -221,7 +245,9 @@ export function finalize(
 
   if (status === "done") return { ...base, type: "done" };
   if (status === "clarify") {
-    const options = cleanList(output.options, OPTIONS_MAX, OPTION_MAX);
+    const options = cleanList(output.options.map(speakPhones), OPTIONS_MAX, OPTION_MAX).filter(
+      (option) => !option.includes("말씀하신 번호"),
+    );
     const fact = output.fact === "none" ? {} : { fact: output.fact };
     return { ...base, type: "ask", ...(options.length > 0 ? { options } : {}), ...fact };
   }
@@ -238,7 +264,12 @@ export function finalize(
       return { ...base, type: "highlight", ...withTarget(output.target_id) };
     case "type": {
       if (!validTarget || output.target_id === null) return fallback;
-      const [typeText] = cleanList([output.type_text ?? ""], 1, CHIP_MAX);
+      const fieldText = nodes.get(output.target_id) ?? "";
+      const raw = output.type_text ?? "";
+      // 자리표시는 번호 칸일 때만 진짜 번호로. 칸 글자가 없으면 앱이 알려 준 입력 상태로 판단
+      const typeText = /번호\s*\d/.test(raw)
+        ? restorePhones(raw.trim(), phones, isPhoneField(fieldText || inputState))
+        : cleanList([raw], 1, CHIP_MAX)[0];
       return {
         ...base,
         type: "suggest",
@@ -296,7 +327,7 @@ export async function guide(
     return say(FALLBACK_SAY.secret);
   }
 
-  const { input, masked } = toPromptInput(request, now);
+  const { input, masked, phones } = toPromptInput(request, now);
   trace.input = input;
   trace.masked = masked;
   const started = Date.now();
@@ -319,12 +350,13 @@ export async function guide(
 
   const response =
     result.status === "ok"
-      ? finalize(
-          requestId,
-          result.output,
-          nodeTexts(request),
-          new Set(request.screen.nodes.filter((node) => node.editable === true).map((n) => n.i)),
-        )
+      ? finalize(requestId, result.output, nodeTexts(request), {
+          editable: new Set(
+            request.screen.nodes.filter((n) => n.editable === true).map((n) => n.i),
+          ),
+          phones,
+          ...(request.slots.state === undefined ? {} : { inputState: request.slots.state }),
+        })
       : say(FALLBACK_SAY.unsure);
   if (result.status === "ok") onTrace?.(trace);
 
