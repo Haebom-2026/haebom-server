@@ -374,7 +374,7 @@ WebSocket(API Gateway WebSocket API)은 연결 관리 비용 대비 이득이 �
 | S2    | 알림(#6·#7·#8·#21·#22) + push-fn + 중복 방지 + Idempotency                                                                                               | 시연 SOS·정부24 L1 |
 | S3    | 승인(#9·#10·#13·#19·#23·#24) + 고령자 FCM data + expire-fn                                                                                               | 시연 정부24 L2     |
 | S4    | AI #17 classify (구조화 출력, max 보정, 회귀 세트)                                                                                                       | 시연 사기 의심 L3  |
-| S5    | AI #16 guide (target 검증, 거부 규칙, 대체 응답)                                                                                                         | 서버 AI 안내       |
+| S5 ✅ | AI #16 guide (target 검증, 거부 규칙, 대체 응답). 계약: [docs/api/s5-guide.md](api/s5-guide.md)                                                          | 서버 AI 안내       |
 | S6    | **캐싱 계층** (사용자 설계 반영) + 비용 메트릭                                                                                                           | –                  |
 | S7    | 하드닝: 레이트 리밋, 알람, 부하 테스트, prod 스테이지                                                                                                    | 시연 전            |
 
