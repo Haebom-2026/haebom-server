@@ -118,4 +118,6 @@ export interface GuideResponse {
   nav?: (typeof NAV_ACTIONS)[number];
   /** 이 안내의 id. 어르신이 따르면 앱이 다음 요청의 lastAction.stepId 로 돌려준다 */
   stepId?: string;
+  /** (dev, R4) 누가 안내했나: 지도(map) 또는 Claude(ai). 지도 안내가 켜진 환경에서만 붙음 */
+  source?: "map" | "ai";
 }

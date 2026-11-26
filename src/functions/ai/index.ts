@@ -3,6 +3,7 @@ import { claudeGuideModel } from "../../ai/guide-model.js";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createProfileGuard } from "../../core/profile.js";
 import { createAwsDebugStore } from "../../debug/aws-store.js";
+import { createAwsMapStore } from "../../map/store.js";
 import { createCommandTraceRecorder } from "../../debug/command-trace.js";
 import { createGuideTraceRecorder } from "../../debug/guide-trace.js";
 import { createAwsCommandStore } from "../../route/command-store.js";
@@ -52,12 +53,22 @@ const selector =
       : createRouteSelector(routeDeps)
     : undefined;
 
+const commands = createAwsCommandStore(table);
 const classifyDeps = {
   model: claudeClassifyModel,
   selector,
-  commands: createAwsCommandStore(table),
+  commands,
   recorder: debugStore ? createCommandTraceRecorder(debugStore, routeMap) : undefined,
 };
+
+/**
+ * 지도 안내 (R4). dev 에서만: MAP_GUIDE_ENABLED=true 이고 디버그 저장소가 있을 때 (명령 단계 기록과 함께 씀).
+ * 지도는 사람이 승인한 길만 (scripts/map-seed.ts).
+ */
+const mapGuide =
+  process.env.MAP_GUIDE_ENABLED === "true" && recorder
+    ? { commands, maps: createAwsMapStore(table), routeMap }
+    : undefined;
 
 /** ai-fn: #16 guide, #17 classify, 앱 선택, 끝 신호. */
 export const router = createRouter([
@@ -69,6 +80,7 @@ export const router = createRouter([
       modelName: process.env.ANTHROPIC_MODEL,
       // 명령 단계 기록은 디버그 저장소가 있는 dev 에서만 (prod 는 개인정보 정책 뒤)
       commandLog: recorder ? createAwsCommandLog(table) : undefined,
+      mapGuide,
     }),
   },
   {

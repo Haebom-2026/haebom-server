@@ -424,3 +424,9 @@ dev 시험 (앱 쪽이 남긴 실제 네이버지도 화면, 상황마다 2회):
 - 응답에 `stepId`(이 안내의 id)가 붙습니다. 어르신이 이 안내를 따르면 다음 요청의 `lastAction.stepId`로 돌려주세요
 - `commandId`가 오면 dev에서 화면·안내·실제 행동을 명령 단계로 남깁니다 (`ELDER#<uid>` / `CMD#<id>#STEP#…`, 3일). prod는 개인정보 정책이 정해질 때까지 남기지 않습니다
 - 끝 신호는 [s4-classify.md](s4-classify.md) 8장
+
+## R4 추가 (2026-11-27, dev)
+
+- dev에서는 검증된 지도 길이 있으면 Claude 없이 안내합니다 ([jev-routing-plan.md](../jev-routing-plan.md) 5.4). 응답 모양은 같습니다 (`highlight`·`swipe`, `status: "in_progress"`, `stepId`)
+- dev 응답에 `source: "map" | "ai"`가 붙습니다 (누가 안내했나). prod에는 붙지 않습니다
+- 지도 안내를 받으려면 `commandId`와 `lastAction`(따른 안내의 `stepId` 포함)을 꼭 보내 주세요. `stepId`가 안 돌아오면 같은 화면에서는 같은 안내를 다시 주고, 다른 화면이면 그 명령은 Claude가 이어서 안내합니다

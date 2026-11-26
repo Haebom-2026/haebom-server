@@ -84,7 +84,9 @@ export type GuideModel = (input: GuidePromptInput) => Promise<GuideModelResult>;
 export interface GuideTrace {
   promptVersion: string;
   /** 모델을 부르지 않은 이유 */
-  skipped?: "empty-screen" | "secret-screen";
+  skipped?: "empty-screen" | "secret-screen" | "map";
+  /** (dev, R4) 지도 안내 판단: 지도로 안내했으면 decision step·resend, Claude 로 넘겼으면 ai + 이유 */
+  map?: { fp: string; decision: "step" | "resend" | "ai"; reason?: string; ref?: string };
   /** AI 에 보낸 그대로 (마스킹 후, 위치 %·상태 포함) */
   input?: GuidePromptInput;
   masked?: number;
