@@ -177,6 +177,8 @@ export interface GuideRecord {
     model?: string;
     promptVersion?: string;
     skipped?: string;
+    /** 지도 안내 판단 (R4): step·resend 면 지도가 안내, ai 면 Claude 로 넘긴 이유 */
+    map?: { fp: string; decision: "step" | "resend" | "ai"; reason?: string; ref?: string };
     status?: string;
     stopReason?: string | null;
     latencyMs?: number;

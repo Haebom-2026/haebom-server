@@ -8,6 +8,7 @@ import { api } from "../api.ts";
 import { fpChip, h, time } from "../dom.ts";
 import { subscribeScreens, type Subscription } from "../subscribe.ts";
 import type { ScreenSummary } from "../types.ts";
+import { commandInsightSection } from "./command-insight.ts";
 import { commandSummary, renderCommand } from "./command-panel.ts";
 import { renderScreen } from "./screen-panel.ts";
 
@@ -219,7 +220,10 @@ export function deviceView(
         .entry(deviceId, screenId)
         .then((doc) => {
           if (token !== loadToken || disposed) return;
-          panel.replaceChildren(renderCommand(doc));
+          panel.replaceChildren(
+            renderCommand(doc),
+            commandInsightSection(deviceId, doc.command.commandId),
+          );
         })
         .catch((error: unknown) => {
           if (token !== loadToken) return;

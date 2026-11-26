@@ -4,10 +4,12 @@
  * 시계 글자가 바뀌어도 지문이 같은지 볼 수 있도록 같은 화면을 다시 지나가게 했다.
  */
 import type { Api } from "./api.ts";
+import { mockCommandInsight, mockLearnedMap } from "./mock-learn.ts";
 import type {
   ClassifyEntryDetail,
   CommandEntryDocument,
   Device,
+  GuideRecord,
   Pin,
   ScreenDocument,
   ScreenMatch,
@@ -176,6 +178,8 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
           }
         : { version: "match@v1", kind: "similar", pageId, score: 0.71 };
   seenFps.set(pageId, (seen ?? new Set()).add(fp));
+  // 정부24 화면은 guide 요청으로 저장된 것처럼: 짝수 단계는 지도 안내, 홀수는 Claude (지도 판단은 ai)
+  const guide = pkg === "kr.go.gov24" ? mockGuide(step, fp) : undefined;
   screens.push({
     screenId: screenIdAt(at),
     deviceId,
@@ -190,6 +194,7 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
     pinned: false,
     match,
     screen: { pkg, width: W, height: H, nodes },
+    ...(guide ? { guideType: "highlight", guide } : {}),
   });
   const device = devices.get(deviceId);
   if (device) {
@@ -197,6 +202,35 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
     device.lastSeenAt = at.toISOString();
     device.screenCount += 1;
   }
+}
+
+function mockGuide(step: number, fp: string): GuideRecord {
+  const map = step % 2 === 0;
+  const mfp = `m${fp.slice(0, 15)}`;
+  return {
+    type: "highlight",
+    say: "여기를 눌러 주세요",
+    target: 3,
+    latencyMs: map ? 0 : 2100,
+    request: { requestId: step + 1, goal: "OPEN_APP", utterance: "등본 떼고 싶어", history: [] },
+    ai: map
+      ? {
+          model: "map",
+          promptVersion: "map@v1",
+          skipped: "map",
+          latencyMs: 0,
+          map: { fp: mfp, decision: step % 4 === 0 ? "step" : "resend", ref: "1fedd0adbf19281a" },
+        }
+      : {
+          model: "claude-sonnet-5-5",
+          promptVersion: "guide@v4.8",
+          status: "ok",
+          latencyMs: 2100,
+          map: { fp: mfp, decision: "ai", reason: step % 3 === 0 ? "no-path" : "already-ai" },
+          output: { action: "tap", target_id: 3, speech: "여기를 눌러 주세요" },
+        },
+    response: { type: "highlight", target: 3, say: "여기를 눌러 주세요" },
+  };
 }
 
 // ---------- 명령 기록 (classify·앱 선택) ----------
@@ -588,4 +622,6 @@ export const mockApi: Api = {
     return delay(pin);
   },
   pins: () => delay({ items: pins }),
+  learnedMap: () => delay(mockLearnedMap()),
+  commandInsight: (deviceId, commandId) => delay(mockCommandInsight(deviceId, commandId)),
 };

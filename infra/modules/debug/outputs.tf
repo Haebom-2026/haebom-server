@@ -29,3 +29,8 @@ output "viewer_bucket" {
 output "viewer_distribution_id" {
   value = aws_cloudfront_distribution.viewer.id
 }
+
+# envs/dev 가 main 테이블 읽기 권한(지도·명령 검토)을 붙일 때 쓴다
+output "role_name" {
+  value = module.debug_fn.role_name
+}

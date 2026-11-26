@@ -539,6 +539,8 @@ dev   : 로컬에서 직접 (GitHub 배포 역할 없음)
 | GET /v1/dev/devices/{deviceId}/screens/{screenId}               | 뷰어      | 화면 JSON 원본 (S5 이후 #16 응답 포함). screenId = `20261126T070104123Z-1a2b3c` (받은 시각 + 난수, 문자열 정렬 = 시간순)                                                   |
 | PUT /v1/dev/devices/{deviceId}/pins                             | 뷰어      | `{from, to, name}` 이 시간 구간의 화면을 "보관 세션"으로 표시 (예: "정부24 L2 흐름 1회차") → 30일 보관                                                                     |
 | GET /v1/dev/pins                                                | 뷰어      | 보관 세션 목록                                                                                                                                                             |
+| GET /v1/dev/devices/{deviceId}/commands/{commandId}             | 뷰어      | 명령 하나의 기록·단계·Opus 검토·지도 반영/대기 (기기의 uid 로 찾음, main 테이블 읽기만, [jev 기획](jev-routing-plan.md) 9.1)                                               |
+| GET /v1/dev/map                                                 | 뷰어      | 배운 지도: 연결선·목표·도착 화면·사람 확인 대기·반영 기록·긴급 차단 (읽기만)                                                                                               |
 
 - **deviceId**: 앱이 처음 실행할 때 만드는 UUID, #4 `PUT /v1/devices/{deviceId}` 와 같은 값. 재설치로 uid가 바뀌어도 기기를 이어서 볼 수 있다(앱 저장소가 지워지면 새 기기로 보임).
 - **노드 필드**: `i`, `t` 외에 bounds(좌표)·클래스·clickable 등은 **앱 실제 샘플을 받아 확정** (14장 #14). 박스를 그리려면 bounds와 화면 크기가 꼭 있어야 한다.
@@ -602,13 +604,14 @@ fp@v1 은 바뀌는 글자·위치 밀림·목록 항목에 쉽게 갈린다 (de
 - Firebase 웹 설정(공개 값)은 빌드에 넣지 않고 `/config.json` 에서 읽는다. Terraform 이 `firebase_web_api_key` 로 만든다 → 키가 바뀌어도 다시 빌드할 필요 없음. 로컬은 `viewer/.env.local`.
 - Firebase Auth **승인된 도메인**에 CloudFront 도메인을 추가해야 Google 로그인이 된다 (콘솔에서 수동).
 - 로그인: Firebase Auth Google 로그인 (같은 Firebase 프로젝트 → JWT Authorizer 그대로 사용).
-- 화면 6개:
+- 화면 7개:
   1. **기기 목록** — 라벨, 모델, OS, 앱 버전, online 점, 마지막 신호, 화면 수, 라벨 편집
-  2. **기기 상세** — 화면 기록 시간순(1초 폴링으로 새 화면이 위에 붙음), 같은 지문 연속은 묶어서, pkg로 거르기, 구간 선택 → "보관 세션" 지정 · classify·앱 선택 명령 기록도 같은 목록에 (`jev`·`선택` 줄 → 안전 분류·jev 판정 과정, [jev 기획](jev-routing-plan.md) 9.1)
+  2. **기기 상세** — 화면 기록 시간순(1초 폴링으로 새 화면이 위에 붙음), 같은 지문 연속은 묶어서, pkg로 거르기, 구간 선택 → "보관 세션" 지정 · classify·앱 선택 명령 기록도 같은 목록에 (`jev`·`선택` 줄 → 안전 분류·jev 판정 과정, [jev 기획](jev-routing-plan.md) 9.1, 그 아래 단계·끝·Opus 검토·지도 반영). guide 화면에는 지도 안내 판단(지도/Claude·넘긴 이유)
   3. **화면 뷰어** — 화면 크기 비율의 캔버스에 bounds 박스 + `i` 번호, 마우스를 올리면 노드 속성, 오른쪽에 노드 목록(클릭 시 박스 강조), 서버 지문·같은 화면 이력, 화면 이름 붙이기. S5 이후 LLM이 고른 target 강조 + say·지연·토큰 표시
   4. **보관 세션** — 세션 목록, 세션 안 화면을 지문별로 묶어 보기
   5. **화면 지도** (`#/map`) — 화면 하나 = 점, 같은 화면끼리 선으로 이음, 앱마다 색. 마우스를 올리면 미리 보기, 누르면 화면 뷰어. "같은 화면" 규칙을 페이지 매칭(서버, 기본) / fp@v1 / 위치 빼기 / 누를 수 있는 노드만 으로 바꿔 지문이 얼마나 갈리는지 비교 (S6 캐시 키 정하기용, 규칙은 `viewer/src/fp-rules.ts`)
   6. **고르기** (`#/route`) — jev 앱·목표 고르기 판정. `scripts/route-eval.ts --out` 결과 파일을 브라우저에서 열어 말마다 1단계 확률·역할 합계·탄 규칙·후보·2단계 목표 확률을 보고, 두 파일을 열어 결과가 달라진 말만 거름 ([jev 기획](jev-routing-plan.md) 9.1)
+  7. **배운 지도** (`#/learn`) — 지도 안내가 쓰는 목표·연결선과 자동 반영 상태(후보/verified, 증거 기기 수, 최근 결과, 내려감·90일·차단), 사람 확인 대기. 보기만 하고 승인·차단은 `scripts/map-*.ts` ([jev 기획](jev-routing-plan.md) 8.4·9.1)
 
 ### 12.9 구현 위치 (S0.5)
 
