@@ -111,7 +111,17 @@ describe("#6 민감 앱 알림", () => {
     await ctx.link(G1, "어머니");
     await ctx.link(G2, "장모님");
     const res = await ctx.call("POST", "/v1/elder/sensitive-entries", ELDER, toss);
-    expect(res).toMatchObject({ status: 201, body: { result: "created", guardianCount: 2 } });
+    expect(res).toMatchObject({
+      status: 201,
+      body: {
+        result: "created",
+        guardianCount: 2,
+        guardians: [
+          { guardianId: G1, guardianLabel: "딸" },
+          { guardianId: G2, guardianLabel: "딸" },
+        ],
+      },
+    });
 
     const g1 = (await ctx.call("GET", "/v1/guardian/notifications", G1)).body as Items;
     expect(g1.items).toEqual([
