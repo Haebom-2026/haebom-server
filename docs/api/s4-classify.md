@@ -153,3 +153,36 @@ classify 응답의 `route.candidates` 중 **폰이 고른 앱**을 서버에 고
 | 와이파이 비밀번호 알려 줘 (규칙 L2)        | 모델 L0 → 최종 L2 (규칙 유지)  | 2.3초 |
 
 모델 시간 0.8~2.3초 (모델 타임아웃 3.5초, 지침서 목표 4초).
+
+## 8. 끝 신호 — POST /v1/elder/commands/{commandId}/end (R3)
+
+명령이 끝났음과 마지막 화면을 받습니다 ([jev 기획](../jev-routing-plan.md) 6·7장).
+
+```json
+요청
+{ "result": "done",
+  "finalScreen": { "pkg": "com.android.settings", "width": 1080, "height": 2400, "nodes": [ … ] },
+  "deviceId": "dev-pixel-01",
+  "lastAction": { "stepId": "s…", "seq": 2, "action": "swipe_left", "text": "밝기" } }
+
+응답 200
+{ "commandId": 42, "result": "done", "finalScreenSaved": true }
+```
+
+| `result`       | 뜻                                           | Opus 검토 |
+| -------------- | -------------------------------------------- | --------- |
+| `done`         | 어르신의 일이 끝남                           | ✅        |
+| `stopped_safe` | 멈춤 단계(송금·설치 확인 등)에서 바르게 멈춤 | ✅        |
+| `stopped_user` | 어르신이 그만둠                              | –         |
+| `gave_up`      | 안내가 막혀 포기                             | –         |
+
+- 한 번 정한 결과는 바뀌지 않음: 같은 결과 재전송 200, 다른 결과 409. 다른 어르신의 명령·지난 명령은 404
+- `finalScreen`은 성공 판정의 근거라 `done`·`stopped_safe`이면 꼭 보내 주세요 (없으면 검토에서 reject). dev 디버그 저장소에 가린 뒤 저장, prod는 저장하지 않음
+- `lastAction`: 마지막 guide 화면에서 한 마지막 행동 (예: 밝기 막대 밀기). 다음 guide 요청이 없으니 끝 신호에 실어 보냅니다. 모양은 guide의 `lastAction`과 같음 (`seq`는 이어서) — dev에서만 저장 (prod는 개인정보 정책 뒤)
+- dev에서는 `done`·`stopped_safe`가 붙으면 DynamoDB Stream으로 **Opus 검토**(`review-fn`, `review@v1`)가 돕니다. 결과는 **판정만** `ELDER#<uid>` / `CMD#<id>#REVIEW`(30일)에 남고 지도에는 반영하지 않습니다
+  - `accept`: 나중에 자동 반영할 후보 (기존 목표의 안전한 이동·끝 단계)
+  - `human`: 사람 확인 필요 (새 목표, 민감한 끝 단계·목표, 페이지를 못 맞춘 이동)
+  - `reject`: 학습 안 함 (성공 근거 없음, 마지막 화면 없음, 행동 순번이 0부터 이어지지 않음, 민감 행동이 이동에 섞임(권한·설치 창·비밀번호 칸·금액 화면에서 한 행동 포함), 같은 페이지 안의 행동을 이동으로 냄, 화면 속 지시·검토 조작·링크 흔적, 대화·메일·메모·금융·건강 앱 화면을 지남, 사기 의심·민감 역할 명령 …)
+  - 고른 앱이 아닌 앱 화면을 지나면(홈 화면 제외) `human`, 끝난 뒤 classify 재시도로 사기 의심·L3가 되면 그 판정을 `reject`로, L2가 되면 `accept`였던 판정을 `human`으로 낮춤. 민감한 실제 행동을 Opus가 이동·끝 단계에서 빼고 내도 `human`
+  - 검토는 명령 세대(`gen`)마다 한 번만 저장 (`CMD#<id>#REVIEW#<gen>`). 모델 통신 오류·시간 초과는 판정을 남기지 않고 Stream이 다시 시도
+- 시험 (2026-11-27, 로컬, Opus 5.5): 밝기 어둡게 기록 → `success: yes`, 목표 `settings.brightness_down`, 이동 2개 + 끝 단계(막대 밀기, `node_state`), 5.0초, 입력 737·출력 234 토큰

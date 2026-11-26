@@ -53,6 +53,22 @@ export interface CommandRecord {
   chosenApp?: string;
   chosenGoal?: string;
   askedUser?: boolean;
+  /** 끝 신호 (docs/jev-routing-plan.md 6장). 한 번 정하면 바꾸지 않는다 */
+  endResult?: EndResult;
+  endedAt?: string;
+  /** 끝 신호와 함께 받은 마지막 화면 (dev 디버그 저장소에 둠) */
+  finalScreen?: ScreenRef;
+  /** 마지막 guide 화면에서 한 마지막 행동 (끝 신호가 함께 보냄, 글자는 가림) */
+  finalAction?: { stepId?: string; seq: number; action: string; text: string };
+}
+
+export const END_RESULTS = ["done", "gave_up", "stopped_user", "stopped_safe"] as const;
+export type EndResult = (typeof END_RESULTS)[number];
+
+/** 디버그 저장소의 화면 하나를 가리킨다 */
+export interface ScreenRef {
+  deviceId: string;
+  screenId: string;
 }
 
 /** update 로 바꿀 수 있는 필드 */
@@ -71,6 +87,10 @@ export type CommandPatch = Partial<
     | "chosenApp"
     | "chosenGoal"
     | "askedUser"
+    | "endResult"
+    | "endedAt"
+    | "finalScreen"
+    | "finalAction"
   >
 >;
 export type RemovableField = "route" | "clarify";

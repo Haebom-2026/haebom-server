@@ -12,6 +12,8 @@ import { ApiError } from "../../../shared/errors.js";
 import { json } from "../../../shared/http.js";
 import type { RouteHandler } from "../../../shared/router.js";
 import { parseJsonBody } from "../../../shared/validate.js";
+import type { GuideTraceRecorder } from "../../../debug/guide-trace.js";
+import { endCommand, endCommandRequestSchema } from "../../../route/command-end.js";
 
 export type ClassifyRouteDeps = Omit<ClassifyDeps, "log" | "observe"> & {
   /** dev 에만: classify·앱 선택을 디버그 뷰어 기기 목록에 남김 */
@@ -81,4 +83,22 @@ export const createChooseAppRoute =
       }
     }
     return json(200, response);
+  };
+
+/**
+ * POST /v1/elder/commands/{commandId}/end — 명령이 끝났음과 마지막 화면 (R3).
+ * 다른 어르신의 명령은 키가 달라 404. done·stopped_safe 이면 dev 에서 Opus 검토가 돈다.
+ */
+export const createEndCommandRoute =
+  (
+    profiles: ProfileGuard,
+    deps: Pick<ClassifyRouteDeps, "commands"> & { recorder?: GuideTraceRecorder | undefined },
+  ): RouteHandler =>
+  async ({ event, params, log }) => {
+    const me = await profiles.require(event, "elder");
+    const parsed = commandIdSchema.safeParse(params.commandId);
+    if (!parsed.success) throw new ApiError("invalid-argument", "commandId 가 숫자가 아닙니다");
+    const body = parseJsonBody(event, endCommandRequestSchema);
+    const requestLog = log.child({ uid: me.uid, commandId: parsed.data });
+    return json(200, await endCommand(me.uid, parsed.data, body, { ...deps, log: requestLog }));
   };

@@ -13,6 +13,8 @@ import { randomBytes } from "node:crypto";
 import type { GuideRequest, GuideResponse } from "../ai/guide-schema.js";
 import type { GuideTrace } from "../ai/guide.js";
 import { FINGERPRINT_VERSION, fingerprint } from "../cache/fingerprint.js";
+import type { MatchResult } from "../cache/match.js";
+import type { Screen } from "./schema.js";
 import { maskDeep } from "../shared/sensitive.js";
 import { createPageMatcher, type PreparedMatch } from "./pages.js";
 import { newScreenId, type DebugStore } from "./store.js";
@@ -29,7 +31,19 @@ export interface GuideTraceRecord {
 }
 
 export interface GuideTraceRecorder {
-  record(entry: GuideTraceRecord): Promise<{ deviceId: string; screenId: string }>;
+  /** 저장한 화면과 화면 매칭 결과 (매칭에 실패하면 match 없음) */
+  record(
+    entry: GuideTraceRecord,
+  ): Promise<{ deviceId: string; screenId: string; match?: MatchResult }>;
+  /** 끝 신호의 마지막 화면 (명령 검토에 씀). guide 응답 없이 화면만 */
+  recordFinal(entry: {
+    uid: string;
+    screen: Screen;
+    receivedAt: Date;
+    deviceId?: string | undefined;
+    commandId: number;
+    result: string;
+  }): Promise<{ deviceId: string; screenId: string; match?: MatchResult }>;
 }
 
 /** deviceIdSchema 규칙(8~64자 [A-Za-z0-9_-])에 맞는 uid 기반 기기 ID */
@@ -61,6 +75,45 @@ export function createGuideTraceRecorder(
     resolveDebugDevice(store, uid, deviceId);
 
   return {
+    async recordFinal({ uid, screen: raw, receivedAt, deviceId, commandId, result }) {
+      const device = await resolveDevice(uid, deviceId);
+      const masked = maskDeep(raw.nodes);
+      const screen = { ...raw, nodes: masked.value };
+      const screenId = newScreenId(receivedAt, randomBytes(3).toString("hex"));
+      const fp = fingerprint(screen);
+      const prepared = await matcher
+        .prepare({
+          pkg: screen.pkg,
+          fingerprint: fp,
+          nodes: screen.nodes,
+          deviceId: device,
+          screenId,
+          at: receivedAt.toISOString(),
+        })
+        .catch(() => undefined);
+      const saved = await store.saveScreen({
+        uid,
+        dedupeKey: `end|${screenId}`,
+        screenId,
+        deviceId: device,
+        receivedAt: receivedAt.toISOString(),
+        capturedAt: receivedAt.toISOString(),
+        pkg: screen.pkg,
+        ...(screen.hash === undefined ? {} : { appHash: screen.hash }),
+        fingerprint: fp,
+        fpVersion: FINGERPRINT_VERSION,
+        nodeCount: screen.nodes.length,
+        maskedCount: masked.count,
+        pinned: false,
+        guideType: "end",
+        ...(prepared ? { match: prepared.match } : {}),
+        screen,
+        guide: { type: "end", say: "", end: { commandId, result } },
+      });
+      if (saved && prepared) await prepared.commit().catch(() => undefined);
+      return { deviceId: device, screenId, ...(prepared ? { match: prepared.match } : {}) };
+    },
+
     async record({ uid, request, response: sent, trace, model, receivedAt, deviceId }) {
       const device = await resolveDevice(uid, deviceId);
       // 앱에 보낸 응답에는 어르신이 말한 번호가 되돌려져 있을 수 있다 (typeText). 저장할 때는 가린다
@@ -117,7 +170,7 @@ export function createGuideTraceRecorder(
         },
       });
       if (saved && prepared) await prepared.commit().catch(() => undefined);
-      return { deviceId: device, screenId };
+      return { deviceId: device, screenId, ...(prepared ? { match: prepared.match } : {}) };
     },
   };
 }

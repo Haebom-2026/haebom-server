@@ -8,6 +8,7 @@ import {
   type GuideTraceRecorder,
 } from "../src/debug/guide-trace.js";
 import { createGuideRoute } from "../src/functions/ai/routes/guide.js";
+import type { CommandLog, StepRecord } from "../src/route/command-log.js";
 import { createHttpHandler } from "../src/shared/handler.js";
 import { createLogger } from "../src/shared/logger.js";
 import { createRouter } from "../src/shared/router.js";
@@ -149,7 +150,7 @@ describe("guide trace recorder", () => {
 });
 
 describe("POST /v1/elder/guide 기록", () => {
-  const setup = (recorder: GuideTraceRecorder) => {
+  const setup = (recorder: GuideTraceRecorder, commandLog?: CommandLog) => {
     const { store } = memoryCoreStore();
     void store.createUser({ uid: "uid-1", role: "elder", name: "", createdAt: "", updatedAt: "" });
     return createHttpHandler(
@@ -160,6 +161,7 @@ describe("POST /v1/elder/guide 기록", () => {
           handler: createGuideRoute(okModel, createProfileGuard(store), {
             recorder,
             modelName: "m",
+            commandLog,
           }),
         },
       ]),
@@ -180,8 +182,75 @@ describe("POST /v1/elder/guide 기록", () => {
     expect(screens).toHaveLength(1);
   });
 
+  it("commandId 가 오면 stepId 를 주고 명령 단계를 남긴다 (행동 글자는 가림)", async () => {
+    const { store } = memoryDebugStore();
+    const steps: StepRecord[] = [];
+    const commandLog: CommandLog = {
+      appendStep: (step) => {
+        steps.push(step);
+        return Promise.resolve();
+      },
+      listSteps: () => Promise.resolve([]),
+      saveReview: () => Promise.resolve(true),
+      getReview: () => Promise.resolve(undefined),
+      invalidateReview: () => Promise.resolve(),
+    };
+    const handler = setup(createGuideTraceRecorder(store), commandLog);
+    const result = await handler(
+      {
+        ...httpEvent("POST", "/v1/elder/guide", "uid-1"),
+        body: JSON.stringify({
+          ...body,
+          commandId: 42,
+          lastAction: { stepId: "s0", seq: 0, action: "tap", text: "인증번호 123456" },
+        }),
+      },
+      lambdaContext,
+    );
+    const res = parseBody(result.body) as { stepId?: string };
+    expect(res.stepId).toMatch(/^s/);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({
+      uid: "uid-1",
+      commandId: 42,
+      stepId: res.stepId,
+      guide: { type: "highlight", source: "ai" },
+      lastAction: { stepId: "s0", seq: 0, action: "tap", text: "인증번호 ***" },
+    });
+  });
+
+  it("글자 넣기 행동은 넣은 값을 남기지 않는다", async () => {
+    const { store } = memoryDebugStore();
+    const steps: StepRecord[] = [];
+    const commandLog: CommandLog = {
+      appendStep: (step) => {
+        steps.push(step);
+        return Promise.resolve();
+      },
+      listSteps: () => Promise.resolve([]),
+      saveReview: () => Promise.resolve(true),
+      getReview: () => Promise.resolve(undefined),
+      invalidateReview: () => Promise.resolve(),
+    };
+    await setup(createGuideTraceRecorder(store), commandLog)(
+      {
+        ...httpEvent("POST", "/v1/elder/guide", "uid-1"),
+        body: JSON.stringify({
+          ...body,
+          commandId: 42,
+          lastAction: { seq: 0, action: "type", text: "123456" },
+        }),
+      },
+      lambdaContext,
+    );
+    expect(steps[0]?.lastAction).toEqual({ seq: 0, action: "type", text: "" });
+  });
+
   it("기록에 실패해도 응답은 그대로", async () => {
-    const broken: GuideTraceRecorder = { record: () => Promise.reject(new Error("s3 down")) };
+    const broken: GuideTraceRecorder = {
+      record: () => Promise.reject(new Error("s3 down")),
+      recordFinal: () => Promise.reject(new Error("s3 down")),
+    };
     const result = await post(setup(broken));
     expect(result.statusCode).toBe(200);
     expect(parseBody(result.body)).toMatchObject({ type: "highlight" });

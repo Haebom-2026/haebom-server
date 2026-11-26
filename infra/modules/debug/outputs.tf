@@ -6,6 +6,14 @@ output "table_name" {
   value = aws_dynamodb_table.debug.name
 }
 
+output "table_arn" {
+  value = aws_dynamodb_table.debug.arn
+}
+
+output "bucket_arn" {
+  value = aws_s3_bucket.debug.arn
+}
+
 output "bucket_name" {
   value = aws_s3_bucket.debug.bucket
 }

@@ -6,6 +6,19 @@ output "main_table_name" {
   value = module.dynamodb.main_table_name
 }
 
+# 스택 밖 모듈(review)이 명령 항목·Stream 을 읽을 때
+output "main_table_arn" {
+  value = module.dynamodb.main_table_arn
+}
+
+output "main_stream_arn" {
+  value = module.dynamodb.main_stream_arn
+}
+
+output "secret_arns" {
+  value = module.secrets.arns
+}
+
 output "secret_ids" {
   description = "값을 수동으로 등록해야 하는 비밀 이름"
   value       = module.secrets.ids
