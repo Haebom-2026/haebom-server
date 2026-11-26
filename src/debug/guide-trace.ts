@@ -36,19 +36,29 @@ export interface GuideTraceRecorder {
 export const uidDeviceId = (uid: string): string =>
   `uid-${uid.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60)}`.padEnd(8, "0");
 
+/**
+ * 기록을 붙일 디버그 기기: 앱이 보낸 ID → 같은 uid 의 최근 실제 기기 → uid 기반 가상 기기.
+ * (heartbeat 로 등록된 실제 기기만 고른다. 가상 기기는 실제 기기가 없을 때만 쓴다)
+ */
+export async function resolveDebugDevice(
+  store: DebugStore,
+  uid: string,
+  deviceId?: string,
+): Promise<string> {
+  if (deviceId) return deviceId;
+  const virtual = uidDeviceId(uid);
+  const mine = (await store.listDevices())
+    .filter((device) => device.uid === uid && device.deviceId !== virtual)
+    .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+  return mine[0]?.deviceId ?? virtual;
+}
+
 export function createGuideTraceRecorder(
   store: DebugStore,
   matcher = createPageMatcher(store),
 ): GuideTraceRecorder {
-  const resolveDevice = async (uid: string, deviceId?: string): Promise<string> => {
-    if (deviceId) return deviceId;
-    // 실제 기기(heartbeat 로 등록)만 고른다. uid 기반 가상 기기는 실제 기기가 없을 때만 쓴다
-    const virtual = uidDeviceId(uid);
-    const mine = (await store.listDevices())
-      .filter((device) => device.uid === uid && device.deviceId !== virtual)
-      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
-    return mine[0]?.deviceId ?? virtual;
-  };
+  const resolveDevice = (uid: string, deviceId?: string) =>
+    resolveDebugDevice(store, uid, deviceId);
 
   return {
     async record({ uid, request, response: sent, trace, model, receivedAt, deviceId }) {

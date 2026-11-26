@@ -8,6 +8,7 @@ import { api } from "../api.ts";
 import { fpChip, h, time } from "../dom.ts";
 import { subscribeScreens, type Subscription } from "../subscribe.ts";
 import type { ScreenSummary } from "../types.ts";
+import { commandSummary, renderCommand } from "./command-panel.ts";
 import { renderScreen } from "./screen-panel.ts";
 
 export function deviceView(
@@ -99,7 +100,9 @@ export function deviceView(
     ),
   );
 
-  const visible = () => (pkgFilter ? screens.filter((x) => x.pkg === pkgFilter) : screens);
+  // 명령 기록(classify·앱 선택)은 앱을 걸러도 늘 보인다
+  const visible = () =>
+    pkgFilter ? screens.filter((x) => x.entry || x.pkg === pkgFilter) : screens;
 
   /** 선택 구간 (오래된 → 최신) */
   const selection = (): { from: string; to: string } | undefined => {
@@ -110,7 +113,7 @@ export function deviceView(
   };
 
   function renderList() {
-    const pkgs = [...new Set(screens.map((x) => x.pkg))].sort();
+    const pkgs = [...new Set(screens.filter((x) => !x.entry).map((x) => x.pkg))].sort();
     pkgSelect.replaceChildren(
       h("option", { value: "" }, `모든 앱 (${pkgs.length})`),
       ...pkgs.map((p) => h("option", { value: p, selected: p === pkgFilter }, p)),
@@ -122,13 +125,49 @@ export function deviceView(
       ...items.map((x, index) => {
         const older = items[index + 1];
         const inRange = sel ? x.screenId >= sel.from && x.screenId <= sel.to : false;
+        if (x.entry && x.command) {
+          const c = x.command;
+          return h(
+            "li",
+            {
+              class: ["cmd", x.screenId === selectedId ? "selected" : "", inRange ? "in-range" : ""]
+                .filter(Boolean)
+                .join(" "),
+              onclick: () => {
+                rangeEnd = undefined;
+                if (!range) {
+                  follow = x === screens[0];
+                  followBox.checked = follow;
+                }
+                select(x.screenId);
+              },
+            },
+            h("span", { class: "mono small" }, time(x.receivedAt)),
+            h(
+              "span",
+              {
+                class: `tag cmd-tag ${c.kind}`,
+                title: c.kind === "classify" ? "classify: 안전 분류 + jev 고르기" : "앱 선택 API",
+              },
+              c.kind === "classify" ? "jev" : "선택",
+            ),
+            h("span", { class: "cmd-text" }, commandSummary(c)),
+            c.level
+              ? h(
+                  "span",
+                  { class: `tag ${c.level >= "L2" ? "warn" : ""}`, title: "명령 단계" },
+                  c.level,
+                )
+              : null,
+          );
+        }
         return h(
           "li",
           {
             class: [
               x.screenId === selectedId ? "selected" : "",
               inRange ? "in-range" : "",
-              older && older.fingerprint === x.fingerprint ? "same" : "",
+              older && !older.entry && older.fingerprint === x.fingerprint ? "same" : "",
             ]
               .filter(Boolean)
               .join(" "),
@@ -164,9 +203,10 @@ export function deviceView(
     );
     if (!items.length) list.append(h("li", { class: "empty muted" }, "화면 기록이 없어요."));
     more.hidden = !cursor;
-    status.textContent = range
-      ? `${screens.length}개 화면`
-      : `${screens.length}개 불러옴 · 1초마다 확인`;
+    const shots = screens.filter((x) => !x.entry).length;
+    const commands = screens.length - shots;
+    const counts = `화면 ${shots}개${commands ? ` · 명령 ${commands}개` : ""}`;
+    status.textContent = range ? counts : `${counts} 불러옴 · 1초마다 확인`;
   }
 
   function select(screenId: string) {
@@ -174,13 +214,29 @@ export function deviceView(
     renderList();
     const token = ++loadToken;
     panel.classList.add("loading");
+    if (screens.find((x) => x.screenId === screenId)?.entry) {
+      api
+        .entry(deviceId, screenId)
+        .then((doc) => {
+          if (token !== loadToken || disposed) return;
+          panel.replaceChildren(renderCommand(doc));
+        })
+        .catch((error: unknown) => {
+          if (token !== loadToken) return;
+          panel.replaceChildren(
+            h("p", { class: "error" }, `명령 기록을 못 불러왔어요: ${(error as Error).message}`),
+          );
+        })
+        .finally(() => panel.classList.remove("loading"));
+      return;
+    }
     api
       .screen(deviceId, screenId)
       .then((doc) => {
         if (token !== loadToken || disposed) return;
         // 같은 지문 이력: 불러온 기록 안에서 계산
         const older = screens.filter(
-          (x) => x.screenId < screenId && x.fingerprint === doc.fingerprint,
+          (x) => !x.entry && x.screenId < screenId && x.fingerprint === doc.fingerprint,
         );
         panel.replaceChildren(
           renderScreen(doc, { sameBefore: older[0], seenCount: older.length + 1 }),

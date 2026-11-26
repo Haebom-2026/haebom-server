@@ -63,6 +63,31 @@ export interface ClassifyDeps {
   commands: CommandStore;
   log: Logger;
   now?: () => Date;
+  /** dev 디버그 기록용: 응답 직전에 판단 과정을 넘긴다 (src/debug/command-trace.ts) */
+  observe?: ((detail: ClassifyDetail) => void) | undefined;
+}
+
+/** 한 번의 classify 판단 과정 (디버그 뷰어용, 말·이유는 가린 것) */
+export interface ClassifyDetail {
+  request: { utterance: string; ruleLevel: Level; ruleApp: string; signals: Signal[] };
+  safety: {
+    status: string;
+    promptVersion: string;
+    output?: {
+      intent: string;
+      app: string | null;
+      level: Level;
+      category: Category;
+      reason: string;
+    };
+    inputTokens?: number;
+    outputTokens?: number;
+  };
+  /** jev 결과 (켜져 있을 때). 기록용 selector 면 trace 가 붙어 있다 */
+  selection?: RouteSelection;
+  response: ClassifyResponse;
+  saved: string;
+  ms: number;
 }
 
 /** 후보 중 검증된 목표들의 단계 (올리는 데만 씀) */
@@ -296,6 +321,35 @@ export async function classify(
     mapVersion: selection?.mapVersion,
     routeMs: selection?.ms,
     routeCost: selection?.cost,
+    saved,
+    ms: Date.now() - started,
+  });
+  deps.observe?.({
+    request: {
+      utterance: masked,
+      ruleLevel: request.ruleLevel,
+      ruleApp,
+      signals: request.signals,
+    },
+    safety: {
+      status: safety.status,
+      promptVersion: CLASSIFY_PROMPT_VERSION,
+      ...(safety.status === "ok"
+        ? {
+            output: {
+              intent: safety.output.intent,
+              app: safety.output.app === null ? null : maskText(safety.output.app).text,
+              level: safety.output.level,
+              category: safety.output.category,
+              reason: maskText(safety.output.reason).text,
+            },
+            inputTokens: safety.inputTokens,
+            outputTokens: safety.outputTokens,
+          }
+        : {}),
+    },
+    ...(selection ? { selection } : {}),
+    response,
     saved,
     ms: Date.now() - started,
   });

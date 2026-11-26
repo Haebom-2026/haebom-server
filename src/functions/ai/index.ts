@@ -3,12 +3,14 @@ import { claudeGuideModel } from "../../ai/guide-model.js";
 import { createAwsCoreStore } from "../../core/aws-store.js";
 import { createProfileGuard } from "../../core/profile.js";
 import { createAwsDebugStore } from "../../debug/aws-store.js";
+import { createCommandTraceRecorder } from "../../debug/command-trace.js";
 import { createGuideTraceRecorder } from "../../debug/guide-trace.js";
 import { createAwsCommandStore } from "../../route/command-store.js";
 import { createJevClient } from "../../route/jev.js";
 import { parseMap } from "../../route/map.js";
 import { SEED_MAP } from "../../route/seed-map.js";
 import { createRouteSelector } from "../../route/select.js";
+import { createRecordingSelector } from "../../route/trace.js";
 import { createHttpHandler } from "../../shared/handler.js";
 import { createLogger } from "../../shared/logger.js";
 import { createRouter } from "../../shared/router.js";
@@ -22,28 +24,34 @@ const profiles = createProfileGuard(createAwsCoreStore(table));
 /** dev 에만 디버그 저장소가 있다 (infra/envs/dev 가 DEBUG_TABLE·DEBUG_BUCKET 을 넘김). prod 는 기록하지 않는다. */
 const debugTable = process.env.DEBUG_TABLE;
 const debugBucket = process.env.DEBUG_BUCKET;
-const recorder =
+const debugStore =
   debugTable && debugBucket
-    ? createGuideTraceRecorder(createAwsDebugStore({ table: debugTable, bucket: debugBucket }))
+    ? createAwsDebugStore({ table: debugTable, bucket: debugBucket })
     : undefined;
+const recorder = debugStore ? createGuideTraceRecorder(debugStore) : undefined;
 
 /**
  * jev 앱·목표 고르기 (docs/jev-routing-plan.md). ROUTE_ENABLED=true 이고 키 비밀 이름이 있을 때만.
  * 꺼져 있으면 classify 는 안전 분류만 한다. 지도는 아직 저장소 seed (R3 에서 스냅샷으로).
  */
 const openRouterSecret = process.env.OPENROUTER_SECRET_ID;
+const routeMap = parseMap(SEED_MAP);
+const routeDeps = openRouterSecret
+  ? { jev: createJevClient({ apiKey: createSecretLoader(openRouterSecret) }), map: routeMap }
+  : undefined;
+// dev(디버그 저장소가 있음)는 판정 과정(trace)을 붙여 뷰어에 남긴다
 const selector =
-  process.env.ROUTE_ENABLED === "true" && openRouterSecret
-    ? createRouteSelector({
-        jev: createJevClient({ apiKey: createSecretLoader(openRouterSecret) }),
-        map: parseMap(SEED_MAP),
-      })
+  process.env.ROUTE_ENABLED === "true" && routeDeps
+    ? debugStore
+      ? createRecordingSelector(routeDeps)
+      : createRouteSelector(routeDeps)
     : undefined;
 
 const classifyDeps = {
   model: claudeClassifyModel,
   selector,
   commands: createAwsCommandStore(table),
+  recorder: debugStore ? createCommandTraceRecorder(debugStore, routeMap) : undefined,
 };
 
 /** ai-fn: #16 guide, #17 classify, 앱 선택. */

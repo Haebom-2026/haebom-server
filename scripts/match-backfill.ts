@@ -74,14 +74,15 @@ async function main() {
     } while (cursor);
   }
   const todo = summaries
-    .filter((s) => s.match === undefined)
+    // 명령 기록(classify·앱 선택)은 화면이 아니다
+    .filter((s) => s.match === undefined && s.entry === undefined)
     .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
   console.log(`화면 ${summaries.length}개 중 매칭 없는 화면 ${todo.length}개`);
 
   const counts: Record<string, number> = {};
   for (const summary of todo) {
     const doc = await store.getScreen(summary.deviceId, summary.screenId);
-    if (!doc) continue;
+    if (!doc || !("screen" in doc)) continue;
     const prepared = await matcher.prepare({
       pkg: doc.pkg,
       fingerprint: doc.fingerprint,

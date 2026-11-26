@@ -22,7 +22,8 @@ import { api } from "../api.ts";
 import { fpHue, h, matchLine, s, time } from "../dom.ts";
 import { RULES, isActionable, ruleKey, type RuleId } from "../fp-rules.ts";
 import { every, subscribeScreens, type Subscription } from "../subscribe.ts";
-import type { Device, ScreenDocument, ScreenSummary } from "../types.ts";
+import type { CommandEntryDocument, Device, ScreenDocument, ScreenSummary } from "../types.ts";
+import { commandSummary, renderCommand } from "./command-panel.ts";
 import { renderScreen } from "./screen-panel.ts";
 
 const REFRESH_MS = 10_000;
@@ -102,6 +103,10 @@ export function mapView(root: HTMLElement): () => void {
   let following = true;
   /** 그 기기의 최근 화면들, 오래된 순 */
   let trail: ScreenDocument[] = [];
+  /** 기기별 명령 기록 요약 (classify·앱 선택, 오래된 순). 지도 점에는 안 들어간다 */
+  let commandsByDevice = new Map<string, ScreenSummary[]>();
+  /** 실시간 기기의 지금 명령: classify 원본 + 그 뒤 앱 선택 */
+  let liveCommand: { classify: CommandEntryDocument; choose?: CommandEntryDocument } | undefined;
 
   const status = h("span", { class: "muted small" }, "불러오는 중…");
   const stats = h("div", { class: "map-stats" });
@@ -249,7 +254,15 @@ export function mapView(root: HTMLElement): () => void {
     try {
       devices = (await api.devices()).items;
       renderDeviceSelect();
-      summaries = (await Promise.all(devices.map((d) => listAll(d.deviceId)))).flat();
+      const listed = (await Promise.all(devices.map((d) => listAll(d.deviceId)))).flat();
+      // 명령 기록(classify·앱 선택)은 화면이 아니라 점으로 그리지 않는다
+      summaries = listed.filter((x) => !x.entry);
+      commandsByDevice = new Map();
+      for (const x of listed
+        .filter((y) => y.entry)
+        .sort((a, b) => a.screenId.localeCompare(b.screenId))) {
+        commandsByDevice.set(x.deviceId, [...(commandsByDevice.get(x.deviceId) ?? []), x]);
+      }
       const missing = summaries.filter((x) => !docCache.has(x.screenId));
       let done = 0;
       const queue = [...missing];
@@ -681,14 +694,51 @@ export function mapView(root: HTMLElement): () => void {
         },
       );
     }
+    liveCommand = undefined;
     drawLive();
     if (deviceId) renderLive();
     else renderOverview(lastGroups, lastPkgs);
     const current = trail[trail.length - 1];
     if (current) reveal(current);
+    if (deviceId) void loadCommand(deviceId, commandsByDevice.get(deviceId) ?? []);
   }
 
-  async function onLive(items: ScreenSummary[]) {
+  /** 명령 기록 중 마지막 classify 와 그 뒤 앱 선택을 불러와 지금 명령으로 */
+  async function loadCommand(deviceId: string, entries: ScreenSummary[]) {
+    const lastClassify = [...entries].reverse().find((x) => x.command?.kind === "classify");
+    if (!lastClassify) return;
+    const choose = entries.find(
+      (x) =>
+        x.command?.kind === "choose" &&
+        x.command.commandId === lastClassify.command?.commandId &&
+        x.screenId > lastClassify.screenId,
+    );
+    try {
+      const [c, chosen] = await Promise.all([
+        api.entry(deviceId, lastClassify.screenId),
+        choose ? api.entry(deviceId, choose.screenId) : Promise.resolve(undefined),
+      ]);
+      if (disposed || deviceId !== liveDevice) return;
+      liveCommand = { classify: c, ...(chosen ? { choose: chosen } : {}) };
+      drawLive();
+      if (following && !selected) renderLive();
+    } catch {
+      // 수명 주기로 지워졌으면 표시하지 않음
+    }
+  }
+
+  async function onLive(all: ScreenSummary[]) {
+    const commands = all.filter((x) => x.entry);
+    if (commands.length) {
+      const deviceId = commands[0]?.deviceId ?? "";
+      const prev = commandsByDevice.get(deviceId) ?? [];
+      const seen = new Set(prev.map((x) => x.screenId));
+      const list = [...prev, ...commands.filter((x) => !seen.has(x.screenId))];
+      commandsByDevice.set(deviceId, list);
+      if (deviceId === liveDevice) void loadCommand(deviceId, list);
+    }
+    const items = all.filter((x) => !x.entry);
+    if (!items.length) return;
     const known = new Set(summaries.map((x) => x.screenId));
     for (const item of items) if (!known.has(item.screenId)) summaries.push(item);
     const docs: ScreenDocument[] = [];
@@ -731,8 +781,16 @@ export function mapView(root: HTMLElement): () => void {
 
   /** 지도 위: 최근 이동 화살표, 지금 점 깜빡임, 판단 보류면 2등 점도 표시 */
   function drawLive() {
-    for (const el of dotLayer.querySelectorAll("circle.live-runner"))
-      el.classList.remove("live-runner");
+    for (const el of dotLayer.querySelectorAll("circle.live-runner, circle.live-target"))
+      el.classList.remove("live-runner", "live-target");
+    // 지금 명령이 고른 앱(앱 선택이 있으면 그 앱, 없으면 후보 전체)의 화면 점
+    const targets = liveDevice ? targetPackages() : new Set<string>();
+    if (targets.size) {
+      for (const el of dotLayer.querySelectorAll<SVGCircleElement>("circle")) {
+        const pkg = dots.get(el.dataset.id ?? "")?.doc.pkg;
+        if (pkg && targets.has(pkg)) el.classList.add("live-target");
+      }
+    }
     const current = trail[trail.length - 1];
     if (!liveDevice || !current) {
       trailLayer.replaceChildren();
@@ -780,6 +838,47 @@ export function mapView(root: HTMLElement): () => void {
     }
   }
 
+  function targetPackages(): Set<string> {
+    const detail = liveCommand?.classify.detail;
+    if (detail?.kind !== "classify" || detail.selection?.kind !== "route") return new Set();
+    const chosen = liveCommand?.choose?.command.appId;
+    return new Set(
+      detail.selection.candidates
+        .filter((c) => !chosen || c.appId === chosen)
+        .flatMap((c) => c.packages),
+    );
+  }
+
+  /** 실시간 패널 맨 위: 지금 명령 (누르면 자세히) */
+  function commandCard(): HTMLElement | null {
+    if (!liveCommand) return null;
+    const { classify, choose } = liveCommand;
+    return h(
+      "button",
+      {
+        class: "live-command",
+        title: "눌러서 판정 과정 보기",
+        onclick: () => {
+          following = false;
+          panel.replaceChildren(
+            h("div", { class: "map-panel-head" }, h("b", {}, "명령"), closeButton()),
+            renderCommand(classify),
+            choose ? renderCommand(choose) : "",
+          );
+        },
+      },
+      h(
+        "div",
+        { class: "small" },
+        h("span", { class: "tag cmd-tag classify" }, "jev"),
+        ` 명령 #${classify.command.commandId} · ${time(classify.receivedAt)}`,
+        classify.command.level ? h("span", { class: "tag" }, classify.command.level) : "",
+      ),
+      h("div", { class: "live-command-text" }, commandSummary(classify.command)),
+      choose?.command ? h("div", { class: "small muted" }, commandSummary(choose.command)) : "",
+    );
+  }
+
   /** 오른쪽: 지금 화면 + 서버 매칭 결과 + 최근 이동 */
   function renderLive() {
     const current = trail[trail.length - 1];
@@ -806,7 +905,11 @@ export function mapView(root: HTMLElement): () => void {
       ),
     );
     if (!current) {
-      panel.replaceChildren(head, h("p", { class: "muted small" }, "새 화면을 기다리는 중…"));
+      panel.replaceChildren(
+        head,
+        commandCard() ?? "",
+        h("p", { class: "muted small" }, "새 화면을 기다리는 중…"),
+      );
       return;
     }
     const dot = dotOf(current);
@@ -824,6 +927,7 @@ export function mapView(root: HTMLElement): () => void {
     const recent = [...trail].reverse();
     panel.replaceChildren(
       head,
+      commandCard() ?? "",
       h(
         "div",
         { class: `live-verdict live-${kind ?? "none"}` },

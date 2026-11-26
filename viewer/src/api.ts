@@ -1,6 +1,6 @@
 import { idToken } from "./auth.ts";
 import { mockApi } from "./mock.ts";
-import type { Device, Pin, ScreenDocument, ScreenPage } from "./types.ts";
+import type { CommandEntryDocument, Device, Pin, ScreenDocument, ScreenPage } from "./types.ts";
 
 export const isMock = import.meta.env.VITE_MOCK === "1";
 
@@ -51,6 +51,8 @@ export interface Api {
   setLabel(deviceId: string, label: string): Promise<void>;
   screens(deviceId: string, query?: ScreenQuery): Promise<ScreenPage>;
   screen(deviceId: string, screenId: string): Promise<ScreenDocument>;
+  /** 명령 기록 (목록의 entry: "command"). 화면과 같은 주소 */
+  entry(deviceId: string, screenId: string): Promise<CommandEntryDocument>;
   pin(deviceId: string, from: string, to: string, name: string): Promise<Pin>;
   pins(): Promise<{ items: Pin[] }>;
 }
@@ -67,6 +69,8 @@ const realApi: Api = {
     return request("GET", `/v1/dev/devices/${enc(deviceId)}/screens${qs ? `?${qs}` : ""}`);
   },
   screen: (deviceId, screenId) =>
+    request("GET", `/v1/dev/devices/${enc(deviceId)}/screens/${enc(screenId)}`),
+  entry: (deviceId, screenId) =>
     request("GET", `/v1/dev/devices/${enc(deviceId)}/screens/${enc(screenId)}`),
   pin: (deviceId, from, to, name) =>
     request("PUT", `/v1/dev/devices/${enc(deviceId)}/pins`, { from, to, name }),

@@ -1225,3 +1225,68 @@ svg.map circle.live-runner {
     max-height: 45vh;
   }
 }
+
+/* 명령 기록 (classify·앱 선택) */
+.timeline li.cmd {
+  grid-template-columns: auto auto 1fr auto;
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+.timeline li.cmd.selected {
+  background: var(--accent-soft);
+}
+.cmd-tag {
+  margin-left: 0;
+  font-weight: 600;
+}
+.cmd-tag.classify {
+  background: var(--accent);
+  color: #fff;
+}
+.cmd-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.cmd-utter {
+  font-size: 18px;
+  margin: 4px 0 0;
+}
+.cmd-raw {
+  margin-top: 16px;
+}
+.cmd-raw pre {
+  max-height: 360px;
+  overflow: auto;
+}
+.cmd-panel + .cmd-panel {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.live-command {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--accent-soft);
+}
+.live-command .tag {
+  margin-left: 0;
+}
+.live-command .tag + .tag {
+  margin-left: 6px;
+}
+.live-command-text {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+svg.map circle.live-target {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
