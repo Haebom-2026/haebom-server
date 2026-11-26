@@ -25,7 +25,12 @@ export interface CoreStore {
   listLinksByGuardian(guardianId: string): Promise<LinkRecord[]>;
   setLinkNames(
     links: readonly LinkRecord[],
-    names: { elderName?: string; guardianName?: string },
+    names: {
+      elderName?: string;
+      guardianName?: string;
+      elderLabel?: string;
+      guardianLabel?: string;
+    },
   ): Promise<void>;
   /** 없으면 false */
   deleteLink(elderId: string, guardianId: string): Promise<boolean>;

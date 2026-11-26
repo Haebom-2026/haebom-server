@@ -19,8 +19,8 @@ export const CATEGORIES = [
 export type Level = (typeof LEVELS)[number];
 export type Category = (typeof CATEGORIES)[number];
 
-/** 같은 어르신·같은 앱의 민감 알림은 10분에 한 번 (지침서 4.1) */
-export const SENSITIVE_DEDUP_MS = 10 * 60_000;
+/** 같은 어르신·같은 앱의 민감 알림은 5분에 한 번 (지침서 4.1 은 10분, 고령자 앱 요청으로 5분) */
+export const SENSITIVE_DEDUP_MS = 5 * 60_000;
 /** 알림 보관 기간 */
 export const NOTIFICATION_TTL_SECONDS = 90 * 24 * 3600;
 

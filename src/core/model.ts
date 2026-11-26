@@ -78,6 +78,13 @@ export const linkByCodeSchema = z.object({
   guardianLabel: label.default(""),
 });
 
+/** 호칭 변경: 둘 중 하나 이상. 빈 문자열이면 호칭을 지움 (이름으로 표시) */
+export const updateLinkLabelsSchema = z
+  .object({ elderLabel: label.optional(), guardianLabel: label.optional() })
+  .refine((v) => v.elderLabel !== undefined || v.guardianLabel !== undefined, {
+    error: "elderLabel or guardianLabel is required",
+  });
+
 /** 고령자 앱이 받는 모양 (#18) */
 export function elderView(link: LinkRecord) {
   return {

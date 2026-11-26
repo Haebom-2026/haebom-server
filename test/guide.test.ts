@@ -89,6 +89,17 @@ describe("toPromptInput", () => {
     expect(input.screen.nodes[0]).not.toHaveProperty("state");
   });
 
+  it("focused 는 상태로, enabled:false 는 disabled 로 넘긴다", () => {
+    const req = request();
+    req.screen.nodes.push(
+      { i: 30, t: "다음", clickable: true, enabled: false },
+      { i: 31, editable: true, focused: true, enabled: true },
+    );
+    const { input } = toPromptInput(req);
+    expect(input.screen.nodes.at(-2)).toMatchObject({ i: 30, state: ["clickable", "disabled"] });
+    expect(input.screen.nodes.at(-1)).toMatchObject({ i: 31, state: ["editable", "focused"] });
+  });
+
   it("오늘 날짜(한국 시각)·mode·user_reply 를 넣는다", () => {
     const { input } = toPromptInput(
       request({ userReply: "네", mode: "solo" }),
@@ -368,19 +379,57 @@ describe("guide", () => {
     });
   });
 
-  it("비밀번호 화면은 모델을 부르지 않는다", async () => {
+  it("비밀번호 입력 칸이 있는 화면은 모델을 부르지 않는다", async () => {
     const model = vi.fn<GuideModel>();
     const secret = request();
-    secret.screen.nodes.push({ i: 14, t: "비밀번호 6자리를 입력하세요" });
+    secret.screen.nodes.push({
+      i: 14,
+      d: "비밀번호 입력",
+      editable: true,
+      b: [100, 800, 900, 900],
+    });
     expect(isSecretScreen(secret)).toBe(true);
     await expect(guide(secret, model, log)).resolves.toMatchObject({ say: FALLBACK_SAY.secret });
+    expect(model).not.toHaveBeenCalled();
+  });
 
-    for (const text of ["암호를 입력하세요", "PIN 입력", "주민등록번호 뒷자리"]) {
+  it("입력 칸 바로 위·왼쪽의 짧은 이름표도 본다", () => {
+    for (const label of [
+      { i: 20, t: "주민등록번호", b: [100, 700, 500, 760] as [number, number, number, number] }, // 위
+      { i: 20, t: "PIN", b: [0, 820, 90, 880] as [number, number, number, number] }, // 왼쪽
+      { i: 20, t: "암호" }, // 위치 모름 → 보수적으로 이름표
+    ]) {
       const screen = request();
-      screen.screen.nodes.push({ i: 15, t: text });
+      screen.screen.nodes.push(label, { i: 21, editable: true, b: [100, 800, 900, 900] });
       expect(isSecretScreen(screen)).toBe(true);
     }
-    expect(model).not.toHaveBeenCalled();
+  });
+
+  it("안내 문구에만 민감 단어가 있거나 입력 칸이 없으면 막지 않는다", () => {
+    const notice = request();
+    notice.screen.nodes.push(
+      {
+        i: 20,
+        t: "주민등록번호 뒷자리는 본인인증 화면에서 직접 입력하세요. 개인정보는 저장되지 않습니다.",
+        b: [0, 300, 1000, 400],
+      },
+      { i: 21, d: "검색", editable: true, b: [100, 1500, 900, 1600] },
+    );
+    expect(isSecretScreen(notice)).toBe(false);
+
+    const keypad = request();
+    keypad.screen.nodes.push(
+      { i: 20, t: "비밀번호 6자리를 입력하세요" },
+      { i: 21, t: "1", clickable: true },
+    );
+    expect(isSecretScreen(keypad)).toBe(false);
+
+    const far = request();
+    far.screen.nodes.push(
+      { i: 20, t: "비밀번호 변경", b: [0, 100, 300, 160] },
+      { i: 21, d: "이름", editable: true, b: [0, 1500, 900, 1600] },
+    );
+    expect(isSecretScreen(far)).toBe(false);
   });
 
   it("은행 앱 화면도 안내한다 (잔액·계좌번호는 가려서 보낸다)", async () => {

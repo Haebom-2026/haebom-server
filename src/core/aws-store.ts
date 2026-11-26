@@ -273,6 +273,14 @@ export function createAwsCoreStore(
         sets.push("guardianName = :gn");
         values[":gn"] = names.guardianName;
       }
+      if (names.elderLabel !== undefined) {
+        sets.push("elderLabel = :el");
+        values[":el"] = names.elderLabel;
+      }
+      if (names.guardianLabel !== undefined) {
+        sets.push("guardianLabel = :gl");
+        values[":gl"] = names.guardianLabel;
+      }
       if (sets.length === 0) return;
       for (const link of links) {
         try {

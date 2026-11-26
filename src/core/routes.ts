@@ -23,6 +23,7 @@ import {
   linkByCodeSchema,
   profileView,
   putDeviceSchema,
+  updateLinkLabelsSchema,
   updateUserSchema,
   type LinkRecord,
   type UserProfile,
@@ -53,6 +54,17 @@ function pathParam(params: Readonly<Record<string, string>>, name: string): stri
 }
 
 const defaultRandomCode = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
+
+/** 바꾸려는 호칭만 (undefined 는 빼서 저장 쪽에 넘긴다) */
+function definedLabels(labels: {
+  elderLabel?: string | undefined;
+  guardianLabel?: string | undefined;
+}) {
+  return {
+    ...(labels.elderLabel === undefined ? {} : { elderLabel: labels.elderLabel }),
+    ...(labels.guardianLabel === undefined ? {} : { guardianLabel: labels.guardianLabel }),
+  };
+}
 
 export function createCoreRoutes(deps: CoreDeps): Route[] {
   const { store } = deps;
@@ -244,6 +256,40 @@ export function createCoreRoutes(deps: CoreDeps): Route[] {
           throw new ApiError("not-found", "Link not found");
         await deps.onUnlink?.(elderId, me.uid);
         return noContent();
+      },
+    },
+
+    // 고령자 쪽 호칭 변경 (보호자 호칭 "큰딸" 등). 응답은 #18 항목 모양
+    {
+      method: "PATCH",
+      path: "/v1/elder/links/{guardianId}",
+      handler: async ({ event, params }) => {
+        const me = await guard.require(event, "elder");
+        const guardianId = pathParam(params, "guardianId");
+        const labels = parseJsonBody(event, updateLinkLabelsSchema);
+        const link = (await store.listLinksByElder(me.uid)).find(
+          (l) => l.guardianId === guardianId,
+        );
+        if (link === undefined) throw new ApiError("not-found", "Link not found");
+        const changed = definedLabels(labels);
+        await store.setLinkNames([link], changed);
+        return json(200, elderView({ ...link, ...changed }));
+      },
+    },
+
+    // 보호자 쪽 호칭 변경 (어르신 호칭 "어머니" 등). 응답은 #20 항목 모양
+    {
+      method: "PATCH",
+      path: "/v1/guardian/links/{elderId}",
+      handler: async ({ event, params }) => {
+        const me = await guard.require(event, "guardian");
+        const elderId = pathParam(params, "elderId");
+        const labels = parseJsonBody(event, updateLinkLabelsSchema);
+        const link = (await store.listLinksByGuardian(me.uid)).find((l) => l.elderId === elderId);
+        if (link === undefined) throw new ApiError("not-found", "Link not found");
+        const changed = definedLabels(labels);
+        await store.setLinkNames([link], changed);
+        return json(200, guardianView({ ...link, ...changed }));
       },
     },
 

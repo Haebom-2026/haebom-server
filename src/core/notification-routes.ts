@@ -72,11 +72,24 @@ export function createNotificationRoutes(deps: NotificationDeps): Route[] {
       ...(dedup ? { dedupUntil: new Date(at.getTime() + SENSITIVE_DEDUP_MS).toISOString() } : {}),
     });
     if (result === "duplicate_suppressed") return json(200, { result });
-    return json(201, { result, notificationId: record.id, guardianCount: links.length });
+    // 고령자 앱이 "{보호자}에게 알림을 보냈어요"를 바로 말할 수 있게 받은 보호자를 함께 준다 (연결 순)
+    const guardians = [...links]
+      .sort((a, b) => a.connectedAt.localeCompare(b.connectedAt))
+      .map((link) => ({
+        guardianId: link.guardianId,
+        guardianLabel: link.guardianLabel,
+        guardianName: link.guardianName,
+      }));
+    return json(201, {
+      result,
+      notificationId: record.id,
+      guardianCount: links.length,
+      guardians,
+    });
   }
 
   return [
-    // #6 민감 앱 알림 (L1 이상, 어르신이 "예"를 눌렀을 때). 같은 앱 10분 안이면 duplicate_suppressed.
+    // #6 민감 앱 알림 (L1 이상, 어르신이 "예"를 눌렀을 때). 같은 앱 5분 안이면 duplicate_suppressed.
     {
       method: "POST",
       path: "/v1/elder/sensitive-entries",
