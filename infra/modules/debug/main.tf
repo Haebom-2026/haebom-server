@@ -161,7 +161,7 @@ resource "aws_lambda_permission" "invoke" {
 data "aws_iam_policy_document" "ai_trace" {
   statement {
     sid       = "DebugTableWrite"
-    actions   = ["dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:Scan"]
+    actions   = ["dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:Scan", "dynamodb:Query"]
     resources = [aws_dynamodb_table.debug.arn]
   }
   statement {

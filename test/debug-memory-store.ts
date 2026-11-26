@@ -1,4 +1,10 @@
-import type { DebugStore, DeviceRecord, PinRecord, ScreenDocument } from "../src/debug/store.js";
+import type {
+  DebugStore,
+  DeviceRecord,
+  PageRecord,
+  PinRecord,
+  ScreenDocument,
+} from "../src/debug/store.js";
 import { summaryOf } from "../src/debug/store.js";
 
 /** 메모리 구현: 라우트 동작만 검증한다 (DynamoDB·S3 연동은 dev 배포 후 확인). */
@@ -6,6 +12,7 @@ export function memoryDebugStore() {
   const devices = new Map<string, DeviceRecord & { lastKey?: string }>();
   const screens: (ScreenDocument & { uid: string })[] = [];
   const pins: PinRecord[] = [];
+  const pages: PageRecord[] = [];
 
   const store: DebugStore = {
     heartbeat({ deviceId, uid, model, os, appVersion, now }) {
@@ -70,6 +77,25 @@ export function memoryDebugStore() {
       return Promise.resolve(record);
     },
     listPins: () => Promise.resolve(pins),
+    listPages: (pkg) => Promise.resolve(structuredClone(pages.filter((p) => p.pkg === pkg))),
+    createPage(page) {
+      pages.push(structuredClone(page));
+      return Promise.resolve();
+    },
+    touchPage(pkg, pageId, { fingerprint, tokens, at }) {
+      const page = pages.find((p) => p.pkg === pkg && p.pageId === pageId);
+      if (!page) return Promise.reject(new Error("page not found"));
+      if (!page.fingerprints.includes(fingerprint)) page.fingerprints.push(fingerprint);
+      page.lastTokens = tokens;
+      page.lastSeenAt = at;
+      page.screenCount += 1;
+      return Promise.resolve();
+    },
+    setScreenMatch(deviceId, screenId, match) {
+      const screen = screens.find((s) => s.deviceId === deviceId && s.screenId === screenId);
+      if (screen) screen.match = match;
+      return Promise.resolve();
+    },
   };
-  return { store, screens };
+  return { store, screens, pages };
 }

@@ -4,7 +4,14 @@
  * 시계 글자가 바뀌어도 지문이 같은지 볼 수 있도록 같은 화면을 다시 지나가게 했다.
  */
 import type { Api } from "./api.ts";
-import type { Device, Pin, ScreenDocument, ScreenNode, ScreenSummary } from "./types.ts";
+import type {
+  Device,
+  Pin,
+  ScreenDocument,
+  ScreenMatch,
+  ScreenNode,
+  ScreenSummary,
+} from "./types.ts";
 
 const W = 1080;
 const H = 2400;
@@ -117,6 +124,7 @@ const devices = new Map<string, Omit<Device, "online">>();
 const screens: ScreenDocument[] = [];
 const pins: Pin[] = [];
 
+const seenFps = new Map<string, Set<string>>();
 const pad = (n: number, width = 2) => String(n).padStart(width, "0");
 const screenIdAt = (date: Date) =>
   `${date.toISOString().replace(/[-:.]/g, "")}-${Math.floor(Math.random() * 0xffffff)
@@ -148,6 +156,15 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
     fp = `${template.fp.slice(0, 15)}b`;
   }
   const pkg = template.pkg ?? "kr.go.gov24";
+  // 서버 화면 매칭 흉내: 템플릿 = 페이지. 처음이면 new, 본 지문이면 exact, 아니면 similar
+  const pageId = `p${String(TEMPLATES.indexOf(template)).padStart(7, "0")}`;
+  const seen = seenFps.get(pageId);
+  const match: ScreenMatch = !seen
+    ? { version: "match@v1", kind: "new", pageId, score: 0 }
+    : seen.has(fp)
+      ? { version: "match@v1", kind: "exact", pageId, score: 1 }
+      : { version: "match@v1", kind: "similar", pageId, score: 0.71 };
+  seenFps.set(pageId, (seen ?? new Set()).add(fp));
   screens.push({
     screenId: screenIdAt(at),
     deviceId,
@@ -160,6 +177,7 @@ function addScreen(deviceId: string, step: number, at: Date, index?: number) {
     nodeCount: nodes.length,
     maskedCount: template.name === "등본 신청" ? 1 : 0,
     pinned: false,
+    match,
     screen: { pkg, width: W, height: H, nodes },
   });
   const device = devices.get(deviceId);

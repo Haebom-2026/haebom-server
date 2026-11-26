@@ -20,6 +20,7 @@ import {
   screenPostSchema,
   screensQuerySchema,
 } from "./schema.js";
+import { createPageMatcher, type PreparedMatch } from "./pages.js";
 import { ONLINE_WINDOW_MS, newScreenId, type DebugStore } from "./store.js";
 
 export interface DebugDeps {
@@ -27,6 +28,8 @@ export interface DebugDeps {
   /** 뷰어를 쓸 수 있는 개발자 이메일 (소문자) */
   viewerEmails: ReadonlySet<string>;
   now?: () => Date;
+  /** 테스트용: 새 페이지 ID */
+  newPageId?: () => string;
 }
 
 export function parseEmailList(raw: string | undefined): Set<string> {
@@ -78,6 +81,7 @@ function validDeviceId(params: Readonly<Record<string, string>>): string {
 export function createDebugRoutes(deps: DebugDeps): Route[] {
   const { store, viewerEmails } = deps;
   const now = deps.now ?? (() => new Date());
+  const matcher = createPageMatcher(store, deps.newPageId);
 
   return [
     {
@@ -105,6 +109,21 @@ export function createDebugRoutes(deps: DebugDeps): Route[] {
         const fp = fingerprint(screen);
         const screenId = newScreenId(received, randomBytes(3).toString("hex"));
 
+        // 이미 본 어느 페이지인지 (시험). 실패해도 화면 저장은 계속한다
+        let prepared: PreparedMatch | undefined;
+        try {
+          prepared = await matcher.prepare({
+            pkg: screen.pkg,
+            fingerprint: fp,
+            nodes: screen.nodes,
+            deviceId: body.deviceId,
+            screenId,
+            at: received.toISOString(),
+          });
+        } catch (error) {
+          log.warn("screen match failed", { error: (error as Error).message });
+        }
+
         const saved = await store.saveScreen({
           uid,
           dedupeKey: `${screen.pkg}|${screen.hash ?? fp}`,
@@ -119,13 +138,26 @@ export function createDebugRoutes(deps: DebugDeps): Route[] {
           nodeCount: screen.nodes.length,
           maskedCount: masked.count,
           pinned: false,
+          ...(prepared ? { match: prepared.match } : {}),
           screen,
         });
+        if (saved && prepared) {
+          await prepared.commit().catch((error: unknown) => {
+            log.warn("page update failed", { error: (error as Error).message });
+          });
+        }
 
         if (masked.count > 0) log.warn("sensitive text masked", { maskedCount: masked.count });
         return json(
           202,
-          saved ? { status: "saved", screenId, fingerprint: fp } : { status: "unchanged" },
+          saved
+            ? {
+                status: "saved",
+                screenId,
+                fingerprint: fp,
+                ...(prepared ? { match: prepared.match } : {}),
+              }
+            : { status: "unchanged" },
         );
       },
     },

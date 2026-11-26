@@ -16,7 +16,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import { api } from "../api.ts";
-import { fpHue, h, s, time } from "../dom.ts";
+import { fpHue, h, matchLine, s, time } from "../dom.ts";
 import { RULES, isActionable, ruleKey, type RuleId } from "../fp-rules.ts";
 import { every } from "../subscribe.ts";
 import type { Device, ScreenDocument, ScreenSummary } from "../types.ts";
@@ -66,7 +66,7 @@ function wire(doc: ScreenDocument, width: number): SVGSVGElement {
 }
 
 export function mapView(root: HTMLElement): () => void {
-  let rule: RuleId = "v1";
+  let rule: RuleId = "page";
   let deviceFilter = "";
   let devices: Device[] = [];
   let summaries: ScreenSummary[] = [];
@@ -134,7 +134,7 @@ export function mapView(root: HTMLElement): () => void {
       h(
         "p",
         { class: "muted small hint" },
-        "점 하나 = 화면 한 번. 같은 화면끼리 선으로 이어요. 속이 빈 점은 같은 화면이 하나뿐인 것(갈렸을 수 있음). 휠로 확대, 끌어서 이동.",
+        "점 하나 = 화면 한 번. 같은 화면끼리 선으로 이어요. 속이 빈 점은 같은 화면이 하나뿐인 것(갈렸을 수 있음), 점선 테두리는 서버가 판단을 보류한 화면. 휠로 확대, 끌어서 이동.",
       ),
       h("div", { class: "map-split" }, canvas, panel),
     ),
@@ -268,7 +268,8 @@ export function mapView(root: HTMLElement): () => void {
     for (let i = 0; i < (fit ? 300 : 120); i++) sim.tick();
 
     draw(pkgs);
-    if (fit) fitView();
+    // 레이아웃이 끝난 뒤 크기를 재야 비율이 맞는다
+    if (fit) requestAnimationFrame(fitView);
     lastGroups = groups;
     lastPkgs = pkgs;
     renderStats(groups, pkgs);
@@ -299,6 +300,7 @@ export function mapView(root: HTMLElement): () => void {
           class: [
             d.group.length === 1 ? "alone" : "",
             d.doc.guideType ? "guide" : "",
+            rule === "page" && d.doc.match?.kind === "ambiguous" ? "ambiguous" : "",
             selected?.id === d.id ? "selected" : "",
           ].join(" "),
           style: `--h:${fpHue(d.doc.pkg)}`,
@@ -438,6 +440,7 @@ export function mapView(root: HTMLElement): () => void {
           : "같은 화면이 이것 하나뿐",
         doc.guideType ? h("span", { class: "tag" }, `guide ${doc.guideType}`) : null,
       ),
+      ...(doc.match ? [h("div", { class: "small" }, matchLine(doc.match))] : []),
       h(
         "div",
         { class: "tip-body" },
@@ -539,7 +542,11 @@ export function mapView(root: HTMLElement): () => void {
       hh = MIN * 0.75;
     }
     const box = svg.getBoundingClientRect();
-    const aspect = box.width / Math.max(1, box.height) || 4 / 3;
+    // 크기를 아직 못 재면(숨김·레이아웃 전) 4:3, 너무 길쭉한 비율은 자른다
+    const aspect =
+      box.width > 50 && box.height > 50
+        ? Math.min(3, Math.max(0.5, box.width / box.height))
+        : 4 / 3;
     // 화면 비율에 맞춰 넓힌다
     if (w / hh > aspect) view = { x: minX, y: minY - (w / aspect - hh) / 2, w, h: w / aspect };
     else view = { x: minX - (hh * aspect - w) / 2, y: minY, w: hh * aspect, h: hh };

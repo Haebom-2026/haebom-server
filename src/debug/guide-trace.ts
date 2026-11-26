@@ -14,6 +14,7 @@ import type { GuideRequest, GuideResponse } from "../ai/guide-schema.js";
 import type { GuideTrace } from "../ai/guide.js";
 import { FINGERPRINT_VERSION, fingerprint } from "../cache/fingerprint.js";
 import { maskDeep } from "../shared/sensitive.js";
+import { createPageMatcher, type PreparedMatch } from "./pages.js";
 import { newScreenId, type DebugStore } from "./store.js";
 
 export interface GuideTraceRecord {
@@ -35,7 +36,10 @@ export interface GuideTraceRecorder {
 export const uidDeviceId = (uid: string): string =>
   `uid-${uid.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60)}`.padEnd(8, "0");
 
-export function createGuideTraceRecorder(store: DebugStore): GuideTraceRecorder {
+export function createGuideTraceRecorder(
+  store: DebugStore,
+  matcher = createPageMatcher(store),
+): GuideTraceRecorder {
   const resolveDevice = async (uid: string, deviceId?: string): Promise<string> => {
     if (deviceId) return deviceId;
     // 실제 기기(heartbeat 로 등록)만 고른다. uid 기반 가상 기기는 실제 기기가 없을 때만 쓴다
@@ -58,7 +62,20 @@ export function createGuideTraceRecorder(store: DebugStore): GuideTraceRecorder 
         history: request.history,
       }).value;
 
-      await store.saveScreen({
+      const fp = fingerprint(screen);
+      // 이 guide 요청 화면이 이미 본 어느 페이지인지 (시험). 실패해도 기록은 남긴다
+      const prepared: PreparedMatch | undefined = await matcher
+        .prepare({
+          pkg: screen.pkg,
+          fingerprint: fp,
+          nodes: screen.nodes,
+          deviceId: device,
+          screenId,
+          at: receivedAt.toISOString(),
+        })
+        .catch(() => undefined);
+
+      const saved = await store.saveScreen({
         uid,
         // guide 요청은 화면이 같아도 매번 남긴다 (요청마다 판단이 다를 수 있음)
         dedupeKey: `guide|${screenId}`,
@@ -68,12 +85,13 @@ export function createGuideTraceRecorder(store: DebugStore): GuideTraceRecorder 
         capturedAt: receivedAt.toISOString(),
         pkg: screen.pkg,
         ...(screen.hash === undefined ? {} : { appHash: screen.hash }),
-        fingerprint: fingerprint(screen),
+        fingerprint: fp,
         fpVersion: FINGERPRINT_VERSION,
         nodeCount: screen.nodes.length,
         maskedCount: masked.count,
         pinned: false,
         guideType: response.type,
+        ...(prepared ? { match: prepared.match } : {}),
         screen,
         guide: {
           // 뷰어 화면 패널이 바로 읽는 요약
@@ -86,6 +104,7 @@ export function createGuideTraceRecorder(store: DebugStore): GuideTraceRecorder 
           response,
         },
       });
+      if (saved && prepared) await prepared.commit().catch(() => undefined);
       return { deviceId: device, screenId };
     },
   };

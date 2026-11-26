@@ -1,5 +1,5 @@
 /** 3. 화면 뷰어 — 노드 박스 + 번호, 노드 목록, 속성 */
-import { fpChip, h, s, time } from "../dom.ts";
+import { fpChip, h, matchLine, s, time } from "../dom.ts";
 import type { ScreenDocument, ScreenNode, ScreenSummary } from "../types.ts";
 import { renderGuide } from "./guide-panel.ts";
 
@@ -158,6 +158,7 @@ export function renderScreen(
           )
         : h("span", { class: "new" }, "새 화면 (처음 보는 지문)"),
     ),
+    doc.match ? h("div", { class: "small" }, matchLine(doc.match)) : null,
     h(
       "div",
       { class: "muted small" },
