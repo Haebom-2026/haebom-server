@@ -11,8 +11,8 @@
 
 | 용도     | 주소                                                          |
 | -------- | ------------------------------------------------------------- |
-| 앱 → API | `https://9a2sj8hqlb.execute-api.ap-northeast-2.amazonaws.com` |
-| 웹 뷰어  | `https://d3jcc37k40jy8z.cloudfront.net`                       |
+| 앱 → API | `https://qq829otaql.execute-api.ap-northeast-2.amazonaws.com` |
+| 웹 뷰어  | `https://dv888sh4vt1v6.cloudfront.net`                        |
 
 - 앱은 **API Gateway 주소를 직접** 쓴다. 뷰어 주소의 `/v1/*` 도 같은 API로 이어지지만, 그건 뷰어 페이지용 통로다.
 - 주소는 dev 환경을 지우고 다시 만들 때만 바뀐다. 확인: `terraform -chdir=infra/envs/dev output`
@@ -128,7 +128,7 @@ POST /v1/dev/screens
 ## 7. 연결 확인
 
 1. 앱 debug 빌드에서 heartbeat 시작
-2. 뷰어(`https://d3jcc37k40jy8z.cloudfront.net`)에 로그인 → **5초 안에 기기 목록에 초록 점**으로 나타난다
+2. 뷰어(`https://dv888sh4vt1v6.cloudfront.net`)에 로그인 → **5초 안에 기기 목록에 초록 점**으로 나타난다
 3. 기기 이름(예: "시연폰 A")을 붙여 두면 여러 기기를 구분하기 쉽다
 4. 폰에서 화면을 옮기면 기기 상세 왼쪽에 기록이 쌓이고, **"실시간 따라가기"** 를 켜 두면 1초 안에 오른쪽에 박스로 그려진다
 5. 같은 화면은 같은 색 지문 칩으로 묶인다. 같은 화면인데 색이 갈리면 지문 규칙(fp@v1)의 개선 대상이다
