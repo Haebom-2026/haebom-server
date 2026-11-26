@@ -1,5 +1,5 @@
 {
-  "version": "map@test-large-1",
+  "version": "map@test-large-2",
   "roles": [
     {
       "id": "appstore",
@@ -201,6 +201,7 @@
     {
       "id": "gov24",
       "name": "정부24",
+      "aliases": ["정부24", "정부 24", "정부이십사"],
       "desc": "정부24 앱. 주민등록등본·초본, 가족관계증명서 같은 공공 서류 발급, 민원 신청",
       "roles": ["gov"],
       "packages": ["kr.go.minwon.m"]
@@ -208,6 +209,7 @@
     {
       "id": "youtube",
       "name": "유튜브",
+      "aliases": ["유튜브", "유투브"],
       "desc": "유튜브 앱. 영상·노래·공연 찾아보기, 영상 틀기",
       "roles": ["video", "music"],
       "packages": ["com.google.android.youtube"]
@@ -215,6 +217,7 @@
     {
       "id": "contacts",
       "name": "연락처",
+      "aliases": ["전화번호부", "연락처 앱"],
       "desc": "휴대폰 기본 연락처(전화번호부) 앱. 전화번호 저장, 연락처 찾기·고치기·지우기",
       "roles": ["contacts"],
       "packages": ["com.samsung.android.app.contacts"]
@@ -222,6 +225,7 @@
     {
       "id": "phone",
       "name": "전화",
+      "aliases": ["전화 앱"],
       "desc": "전화 앱. 누군가에게 전화 걸기, 받은 전화·놓친 전화 보기",
       "roles": ["call"],
       "packages": ["com.samsung.android.dialer"]
@@ -229,6 +233,7 @@
     {
       "id": "settings",
       "name": "설정",
+      "aliases": ["설정"],
       "desc": "휴대폰 설정. 화면 밝기·글자 크기·화면 꺼짐 시간, 소리, 와이파이, 블루투스",
       "roles": ["settings"],
       "packages": ["com.android.settings"]
@@ -236,6 +241,7 @@
     {
       "id": "gallery",
       "name": "갤러리",
+      "aliases": ["갤러리", "사진첩"],
       "desc": "사진첩. 찍은 사진·영상 보기, 사진 지우기",
       "roles": ["gallery"],
       "packages": ["com.sec.android.gallery3d"]
@@ -243,6 +249,7 @@
     {
       "id": "camera",
       "name": "카메라",
+      "aliases": ["카메라"],
       "desc": "카메라 앱. 사진·영상 찍기",
       "roles": ["camera"],
       "packages": ["com.sec.android.app.camera"]
@@ -250,6 +257,7 @@
     {
       "id": "playstore",
       "name": "Play 스토어",
+      "aliases": ["플레이스토어", "플레이 스토어", "구글플레이"],
       "desc": "다른 앱을 새로 깔기(설치)·업데이트·지우기 하는 앱 장터",
       "roles": ["appstore"],
       "packages": ["com.android.vending"]
@@ -257,6 +265,7 @@
     {
       "id": "kakaotalk",
       "name": "카카오톡",
+      "aliases": ["카톡", "카카오톡"],
       "desc": "카카오톡. 가족·친구에게 메시지·사진 보내기, 카톡 친구 추가, 영상 통화",
       "roles": ["messaging"],
       "packages": ["com.kakao.talk"]
@@ -264,6 +273,7 @@
     {
       "id": "kakaot",
       "name": "카카오T",
+      "aliases": ["카카오T", "카카오택시", "카카오 택시"],
       "desc": "카카오T. 택시 부르기",
       "roles": ["taxi"],
       "packages": ["com.kakao.taxi"]
@@ -271,6 +281,7 @@
     {
       "id": "naver",
       "name": "네이버",
+      "aliases": ["네이버"],
       "desc": "네이버 앱. 인터넷 검색, 뉴스, 블로그 글 보기",
       "roles": ["search"],
       "packages": ["example.naver"]
@@ -278,6 +289,7 @@
     {
       "id": "kakaomap",
       "name": "카카오맵",
+      "aliases": ["카카오맵"],
       "desc": "카카오맵. 지도, 길 찾기, 근처 가게·병원 찾기",
       "roles": ["map", "transit"],
       "packages": ["example.kakaomap"]
@@ -285,6 +297,7 @@
     {
       "id": "weather",
       "name": "날씨",
+      "aliases": ["날씨 앱"],
       "desc": "날씨 앱. 오늘·내일 날씨, 비 소식, 미세먼지",
       "roles": ["weather"],
       "packages": ["example.weather"]
@@ -292,6 +305,7 @@
     {
       "id": "clock",
       "name": "시계",
+      "aliases": ["시계 앱"],
       "desc": "시계 앱. 알람 맞추기, 타이머, 스톱워치",
       "roles": ["clock"],
       "packages": ["example.clock"]
@@ -299,6 +313,7 @@
     {
       "id": "messages",
       "name": "메시지",
+      "aliases": ["문자", "메시지 앱"],
       "desc": "문자 메시지 앱. 문자 보내기·읽기",
       "roles": ["messaging"],
       "packages": ["example.messages"]
@@ -306,6 +321,7 @@
     {
       "id": "korail",
       "name": "코레일톡",
+      "aliases": ["코레일"],
       "desc": "코레일톡. KTX·기차표 예매, 승차권 확인",
       "roles": ["train"],
       "packages": ["example.korail"]
@@ -313,6 +329,7 @@
     {
       "id": "coupang",
       "name": "쿠팡",
+      "aliases": ["쿠팡"],
       "desc": "쿠팡. 생필품·물건 주문, 배송 조회",
       "roles": ["shopping"],
       "packages": ["example.coupang"]
@@ -320,6 +337,7 @@
     {
       "id": "baemin",
       "name": "배달의민족",
+      "aliases": ["배달의민족", "배민"],
       "desc": "배달의민족. 음식 배달 주문",
       "roles": ["delivery"],
       "packages": ["example.baemin"]
@@ -327,6 +345,7 @@
     {
       "id": "toss",
       "name": "토스",
+      "aliases": ["토스"],
       "desc": "토스. 송금, 계좌 잔액·카드 내역 보기",
       "roles": ["bank", "pay"],
       "packages": ["example.toss"],
@@ -335,6 +354,7 @@
     {
       "id": "nh_bank",
       "name": "NH농협은행",
+      "aliases": ["농협"],
       "desc": "NH스마트뱅킹. 농협 계좌 잔액 조회, 이체",
       "roles": ["bank"],
       "packages": ["example.nh_bank"],
@@ -343,6 +363,7 @@
     {
       "id": "nhis",
       "name": "The건강보험",
+      "aliases": ["건강보험 앱"],
       "desc": "국민건강보험공단 앱. 건강검진 결과, 보험료, 건강보험 자격득실 확인서",
       "roles": ["health_ins"],
       "packages": ["example.nhis"],
@@ -351,6 +372,7 @@
     {
       "id": "nps",
       "name": "국민연금",
+      "aliases": ["국민연금 앱"],
       "desc": "국민연금 앱. 내 연금 받는 날·예상 금액 보기",
       "roles": ["pension"],
       "packages": ["example.nps"],
@@ -359,6 +381,7 @@
     {
       "id": "ddocdoc",
       "name": "똑닥",
+      "aliases": ["똑닥"],
       "desc": "똑닥. 병원 진료 예약, 접수 대기",
       "roles": ["hospital"],
       "packages": ["example.ddocdoc"]
@@ -366,6 +389,7 @@
     {
       "id": "melon",
       "name": "멜론",
+      "aliases": ["멜론"],
       "desc": "멜론. 노래 듣기, 음원 검색",
       "roles": ["music"],
       "packages": ["example.melon"]
@@ -373,6 +397,7 @@
     {
       "id": "calendar",
       "name": "캘린더",
+      "aliases": ["캘린더", "달력 앱"],
       "desc": "달력 앱. 일정 적기, 약속·기념일 확인",
       "roles": ["calendar"],
       "packages": ["example.calendar"]
@@ -380,6 +405,7 @@
     {
       "id": "band",
       "name": "밴드",
+      "aliases": ["밴드"],
       "desc": "네이버 밴드. 모임·동창회 글과 사진 올리기",
       "roles": ["sns"],
       "packages": ["example.band"]
@@ -387,6 +413,7 @@
     {
       "id": "netflix",
       "name": "넷플릭스",
+      "aliases": ["넷플릭스"],
       "desc": "넷플릭스. 드라마·영화 보기",
       "roles": ["video"],
       "packages": ["example.netflix"]
@@ -394,6 +421,7 @@
     {
       "id": "calculator",
       "name": "계산기",
+      "aliases": ["계산기"],
       "desc": "계산기 앱. 더하기·빼기 계산",
       "roles": ["calculator"],
       "packages": ["example.calculator"]
@@ -401,6 +429,7 @@
     {
       "id": "daangn",
       "name": "당근",
+      "aliases": ["당근"],
       "desc": "당근마켓. 동네 중고 물건 사고팔기",
       "roles": ["secondhand"],
       "packages": ["example.daangn"]
@@ -408,6 +437,7 @@
     {
       "id": "navermap",
       "name": "네이버 지도",
+      "aliases": ["네이버 지도", "네이버지도"],
       "desc": "네이버 지도. 길 찾기, 대중교통 경로, 근처 장소",
       "roles": ["map", "transit"],
       "packages": ["example.navermap"]
@@ -415,6 +445,7 @@
     {
       "id": "tmap",
       "name": "티맵",
+      "aliases": ["티맵"],
       "desc": "티맵. 자동차 길 안내 내비게이션",
       "roles": ["map"],
       "packages": ["example.tmap"]
@@ -422,6 +453,7 @@
     {
       "id": "kakaobus",
       "name": "카카오버스",
+      "aliases": ["카카오버스"],
       "desc": "카카오버스. 버스 도착 시간, 정류장 찾기",
       "roles": ["transit"],
       "packages": ["example.kakaobus"]
@@ -429,6 +461,7 @@
     {
       "id": "subway",
       "name": "지하철종결자",
+      "aliases": ["지하철 앱"],
       "desc": "지하철 노선도, 지하철 도착·환승 안내",
       "roles": ["transit"],
       "packages": ["example.subway"]
@@ -436,6 +469,7 @@
     {
       "id": "srt",
       "name": "SRT",
+      "aliases": ["SRT"],
       "desc": "SRT 승차권 예매 (수서 출발 고속열차)",
       "roles": ["train"],
       "packages": ["example.srt"]
@@ -443,6 +477,7 @@
     {
       "id": "gmarket",
       "name": "G마켓",
+      "aliases": ["G마켓", "지마켓"],
       "desc": "G마켓. 인터넷 쇼핑, 물건 주문",
       "roles": ["shopping"],
       "packages": ["example.gmarket"]
@@ -450,6 +485,7 @@
     {
       "id": "elevenst",
       "name": "11번가",
+      "aliases": ["11번가"],
       "desc": "11번가. 인터넷 쇼핑, 물건 주문",
       "roles": ["shopping"],
       "packages": ["example.elevenst"]
@@ -457,6 +493,7 @@
     {
       "id": "yogiyo",
       "name": "요기요",
+      "aliases": ["요기요"],
       "desc": "요기요. 음식 배달 주문",
       "roles": ["delivery"],
       "packages": ["example.yogiyo"]
@@ -464,6 +501,7 @@
     {
       "id": "coupangeats",
       "name": "쿠팡이츠",
+      "aliases": ["쿠팡이츠"],
       "desc": "쿠팡이츠. 음식 배달 주문",
       "roles": ["delivery"],
       "packages": ["example.coupangeats"]
@@ -471,6 +509,7 @@
     {
       "id": "kb_bank",
       "name": "KB스타뱅킹",
+      "aliases": ["국민은행", "KB스타뱅킹"],
       "desc": "KB국민은행 앱. 계좌 조회, 이체",
       "roles": ["bank"],
       "packages": ["example.kb_bank"],
@@ -479,6 +518,7 @@
     {
       "id": "shinhan",
       "name": "신한 SOL",
+      "aliases": ["신한은행", "신한 SOL"],
       "desc": "신한은행 앱. 계좌 조회, 이체",
       "roles": ["bank"],
       "packages": ["example.shinhan"],
@@ -487,6 +527,7 @@
     {
       "id": "woori",
       "name": "우리WON뱅킹",
+      "aliases": ["우리은행"],
       "desc": "우리은행 앱. 계좌 조회, 이체",
       "roles": ["bank"],
       "packages": ["example.woori"],
@@ -495,6 +536,7 @@
     {
       "id": "post_bank",
       "name": "우체국뱅킹",
+      "aliases": ["우체국"],
       "desc": "우체국 예금 앱. 계좌 조회, 이체",
       "roles": ["bank"],
       "packages": ["example.post_bank"],
@@ -503,6 +545,7 @@
     {
       "id": "kakaobank",
       "name": "카카오뱅크",
+      "aliases": ["카카오뱅크"],
       "desc": "카카오뱅크. 계좌 조회, 이체",
       "roles": ["bank"],
       "packages": ["example.kakaobank"],
@@ -511,6 +554,7 @@
     {
       "id": "kakaopay",
       "name": "카카오페이",
+      "aliases": ["카카오페이"],
       "desc": "카카오페이. 간편 결제, 송금",
       "roles": ["pay"],
       "packages": ["example.kakaopay"],
@@ -519,6 +563,7 @@
     {
       "id": "naverpay",
       "name": "네이버페이",
+      "aliases": ["네이버페이"],
       "desc": "네이버페이. 간편 결제, 포인트",
       "roles": ["pay"],
       "packages": ["example.naverpay"],
@@ -527,6 +572,7 @@
     {
       "id": "hometax",
       "name": "손택스",
+      "aliases": ["홈택스", "손택스"],
       "desc": "국세청 홈택스 모바일. 연말정산, 세금 신고, 소득금액증명",
       "roles": ["tax"],
       "packages": ["example.hometax"],
@@ -535,6 +581,7 @@
     {
       "id": "mobile_id",
       "name": "모바일 신분증",
+      "aliases": ["모바일 신분증"],
       "desc": "모바일 주민등록증·운전면허증 보여 주기",
       "roles": ["id"],
       "packages": ["example.mobile_id"],
@@ -543,6 +590,7 @@
     {
       "id": "genie",
       "name": "지니뮤직",
+      "aliases": ["지니"],
       "desc": "지니. 노래 듣기, 음원 검색",
       "roles": ["music"],
       "packages": ["example.genie"]
@@ -550,6 +598,7 @@
     {
       "id": "ytmusic",
       "name": "YouTube Music",
+      "aliases": ["유튜브 뮤직"],
       "desc": "유튜브 뮤직. 노래·플레이리스트 듣기",
       "roles": ["music"],
       "packages": ["example.ytmusic"]
@@ -557,6 +606,7 @@
     {
       "id": "radio",
       "name": "라디오",
+      "aliases": ["라디오"],
       "desc": "라디오 앱. KBS·MBC 라디오 듣기",
       "roles": ["music"],
       "packages": ["example.radio"]
@@ -564,6 +614,7 @@
     {
       "id": "coupangplay",
       "name": "쿠팡플레이",
+      "aliases": ["쿠팡플레이"],
       "desc": "쿠팡플레이. 드라마·스포츠 중계 보기",
       "roles": ["video"],
       "packages": ["example.coupangplay"]
@@ -571,6 +622,7 @@
     {
       "id": "wavve",
       "name": "웨이브",
+      "aliases": ["웨이브"],
       "desc": "웨이브. 지상파 드라마·예능 다시 보기",
       "roles": ["video"],
       "packages": ["example.wavve"]
@@ -578,6 +630,7 @@
     {
       "id": "tving",
       "name": "티빙",
+      "aliases": ["티빙"],
       "desc": "티빙. 드라마·예능 다시 보기",
       "roles": ["video"],
       "packages": ["example.tving"]
@@ -585,6 +638,7 @@
     {
       "id": "instagram",
       "name": "인스타그램",
+      "aliases": ["인스타그램", "인스타"],
       "desc": "인스타그램. 사진·영상 올리고 보기",
       "roles": ["sns"],
       "packages": ["example.instagram"]
@@ -592,6 +646,7 @@
     {
       "id": "facebook",
       "name": "페이스북",
+      "aliases": ["페이스북"],
       "desc": "페이스북. 친구 소식, 글·사진 올리기",
       "roles": ["sns"],
       "packages": ["example.facebook"]
@@ -599,6 +654,7 @@
     {
       "id": "kakaostory",
       "name": "카카오스토리",
+      "aliases": ["카카오스토리"],
       "desc": "카카오스토리. 사진과 글 올리기",
       "roles": ["sns"],
       "packages": ["example.kakaostory"]
@@ -606,6 +662,7 @@
     {
       "id": "chrome",
       "name": "크롬",
+      "aliases": ["크롬"],
       "desc": "인터넷 브라우저. 웹사이트 열기",
       "roles": ["browser"],
       "packages": ["example.chrome"]
@@ -613,6 +670,7 @@
     {
       "id": "memo",
       "name": "메모",
+      "aliases": ["메모 앱"],
       "desc": "메모 앱. 적어 두기",
       "roles": ["memo"],
       "packages": ["example.memo"]
@@ -620,6 +678,7 @@
     {
       "id": "files",
       "name": "내 파일",
+      "aliases": ["내 파일"],
       "desc": "휴대폰에 받은 파일·문서 찾기",
       "roles": ["files"],
       "packages": ["example.files"]
@@ -1084,5 +1143,6 @@
       "desc": "Play 스토어를 열기만 함",
       "level": "L0"
     }
-  ]
+  ],
+  "otherAppNames": ["당근마켓", "디즈니플러스", "배달앱", "왓챠", "지메일", "카카오페이지", "틱톡"]
 }

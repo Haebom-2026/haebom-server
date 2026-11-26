@@ -172,7 +172,7 @@ async function evaluate(name: string, m: IndexedMap): Promise<void> {
     for (const phone of devices) {
       const first = r.candidates.find((c) => phone.has(c.appId));
       if (!first) {
-        if (r.named) askInstall += 1;
+        if (r.exclusive) askInstall += 1;
         continue;
       }
       picked += 1;
