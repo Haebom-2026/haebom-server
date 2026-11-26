@@ -20,6 +20,8 @@ module "stack" {
   ai_extra_environment = {
     DEBUG_TABLE  = module.debug.table_name
     DEBUG_BUCKET = module.debug.bucket_name
+    # 지도 안내 (docs/jev-routing-plan.md 5장, R4). 사람이 승인한 길만 (scripts/map-seed.ts)
+    MAP_GUIDE_ENABLED = "true"
   }
 }
 
@@ -59,4 +61,24 @@ module "review" {
   anthropic_secret_id      = module.stack.secret_ids["anthropic-api-key"]
   anthropic_secret_arn     = module.stack.secret_arns["anthropic-api-key"]
   log_retention_days       = 14
+}
+
+# 지도 안내 (R4, dev 전용): ai-fn 이 지도 파티션(PK=MAP)을 Query 로 읽는다. 다른 파티션 Query 는 주지 않는다
+data "aws_iam_policy_document" "ai_map_read" {
+  statement {
+    sid       = "MapPartitionQuery"
+    actions   = ["dynamodb:Query"]
+    resources = [module.stack.main_table_arn]
+    condition {
+      test     = "ForAllValues:StringEquals"
+      variable = "dynamodb:LeadingKeys"
+      values   = ["MAP"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "ai_map_read" {
+  name   = "map-read"
+  role   = module.stack.ai_role_name
+  policy = data.aws_iam_policy_document.ai_map_read.json
 }

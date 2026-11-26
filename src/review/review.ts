@@ -122,6 +122,30 @@ const same = (a: string, b: string) => normalizeName(a) === normalizeName(b);
 const isLauncher = (pkg: string) => /launcher|home/i.test(pkg);
 
 /** 단계 기록 → 실제 행동 줄 (각 화면 다음 단계의 lastAction, 마지막은 끝 신호의 행동) */
+/**
+ * 이 명령 세대의 단계만, 시간순 (같은 번호의 지난 명령 단계가 섞이지 않게: 단계 TTL 3일 > 명령 TTL 1일).
+ * 같은 stepId 는 한 단계로: 지도 안내 재요청은 같은 안내(stepId)를 다시 주며 기록이 한 줄 더 생긴다.
+ * 처음 것을 남긴다 (그 화면으로 오게 한 행동 lastAction 이 거기 있음)
+ */
+export function stepsOfCommand(
+  steps: readonly StepRecord[],
+  command: Pick<CommandRecord, "createdAt" | "endedAt">,
+): StepRecord[] {
+  const seen = new Set<string>();
+  return steps
+    .filter(
+      (s) =>
+        s.receivedAt >= command.createdAt &&
+        (command.endedAt === undefined || s.receivedAt <= command.endedAt),
+    )
+    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+    .filter((s) => {
+      if (seen.has(s.stepId)) return false;
+      seen.add(s.stepId);
+      return true;
+    });
+}
+
 export function actionsOf(steps: readonly StepRecord[], command: CommandRecord): ReviewAction[] {
   const index = new Map(steps.map((s, n) => [s.stepId, n]));
   const out: ReviewAction[] = [];
@@ -169,14 +193,7 @@ export async function reviewCommand(
     return undefined;
   }
 
-  // 이 명령 세대의 단계만 (같은 번호의 지난 명령 단계가 섞이지 않게)
-  const steps = (await deps.commandLog.listSteps(uid, commandId))
-    .filter(
-      (s) =>
-        s.receivedAt >= command.createdAt &&
-        (command.endedAt === undefined || s.receivedAt <= command.endedAt),
-    )
-    .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  const steps = stepsOfCommand(await deps.commandLog.listSteps(uid, commandId), command);
   const docs = await Promise.all(steps.map((s) => deps.getScreen(s.screen)));
   const finalDoc = command.finalScreen ? await deps.getScreen(command.finalScreen) : undefined;
   // 가리키는 화면이 아직 안 읽히면(방금 저장) 판정을 남기지 않고 다시 시도

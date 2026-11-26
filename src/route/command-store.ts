@@ -60,6 +60,23 @@ export interface CommandRecord {
   finalScreen?: ScreenRef;
   /** 마지막 guide 화면에서 한 마지막 행동 (끝 신호가 함께 보냄, 글자는 가림) */
   finalAction?: { stepId?: string; seq: number; action: string; text: string };
+  /** 지도 안내 진행 상태 (R4, dev). mode ai 가 되면 그 명령은 끝까지 Claude */
+  mapProgress?: MapProgress;
+}
+
+export interface MapProgress {
+  mode: "map" | "ai";
+  /** 마지막으로 준 지도 안내 (같은 화면 재요청이면 그대로 다시 줌) */
+  stepId?: string;
+  /** 그 안내를 준 화면의 지도 지문 */
+  fp?: string;
+  /** edge: 연결선 id, finish: 끝 단계 번호 */
+  kind?: "edge" | "finish";
+  ref?: string;
+  /** 다시 줄 응답 (같은 stepId) */
+  response?: Record<string, unknown>;
+  /** ai 로 넘어간 이유 */
+  reason?: string;
 }
 
 export const END_RESULTS = ["done", "gave_up", "stopped_user", "stopped_safe"] as const;
@@ -91,6 +108,7 @@ export type CommandPatch = Partial<
     | "endedAt"
     | "finalScreen"
     | "finalAction"
+    | "mapProgress"
   >
 >;
 export type RemovableField = "route" | "clarify";
