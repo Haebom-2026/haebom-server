@@ -90,9 +90,26 @@ export type FailReason =
   /** 말에 서로 다른 앱 이름이 같은 길이로 둘 이상 */
   | "named_ambiguous";
 
+/** 1단계에서 후보를 낸 규칙 (판정 기록·뷰어용, 4.2 순서) */
+export type AppRule =
+  /** 말한 앱 = jev 1등 앱 */
+  | "named"
+  /** 앱 이름이 있지만 깔기·지우기 → Play 스토어 */
+  | "named_appstore"
+  /** 1등 앱 ≥ exclusive → 그 앱만 */
+  | "exclusive"
+  /** 1등 앱 ≥ app → 그 앱 + 같은 역할 앱 */
+  | "top_app"
+  /** 역할 합계 ≥ role */
+  | "role_sum"
+  /** 두 역할이 같은 1등 앱에서 나옴 (유튜브 = 영상·음악) */
+  | "shared_roles";
+
 export type AppJudgement =
   | {
       kind: "candidates";
+      /** 이 후보를 낸 규칙. judgeApp 은 늘 채운다 */
+      rule?: AppRule;
       role: string;
       /** 말한 앱 (별칭이 말에 있음) */
       named: boolean;
@@ -188,11 +205,13 @@ export function judgeApp(
     );
   };
   const result = (
+    rule: AppRule,
     role: string,
     candidates: AppCandidate[],
     extra: { named?: boolean; exclusive?: boolean; mentionedApp?: string } = {},
   ): AppJudgement => ({
     kind: "candidates",
+    rule,
     role,
     named: extra.named ?? false,
     exclusive: extra.exclusive ?? extra.named ?? false,
@@ -212,11 +231,13 @@ export function judgeApp(
   if (mention.kind === "map" || mention.kind === "other") {
     const mentioned = mention.kind === "map" ? mention.appId : undefined;
     if (mentioned !== undefined && topApp === mentioned) {
-      return result(bestRoleOf(topApp), [{ appId: topApp, by: "named" }], { named: true });
+      return result("named", bestRoleOf(topApp), [{ appId: topApp, by: "named" }], {
+        named: true,
+      });
     }
     // "배달의민족 깔아 줘": 앱 이름이 있어도 깔기·지우기면 Play 스토어
     if (isAppStore(topApp) && topAppP >= t.app) {
-      return result(bestRoleOf(topApp), [{ appId: topApp, by: "named" }], {
+      return result("named_appstore", bestRoleOf(topApp), [{ appId: topApp, by: "named" }], {
         named: true,
         mentionedApp: mention.text,
       });
@@ -241,14 +262,19 @@ export function judgeApp(
 
   // 4. 1등 앱 → 그 앱 + 1등 앱의 모든 역할에서 같은 일을 하는 앱. 아주 확실하면 그 앱만
   if (topAppP >= t.exclusive) {
-    return result(bestRoleOf(topApp), [{ appId: topApp, by: "jev" }], { exclusive: true });
+    return result("exclusive", bestRoleOf(topApp), [{ appId: topApp, by: "jev" }], {
+      exclusive: true,
+    });
   }
   if (topAppP >= t.app) {
     const appRoles = m.apps.get(topApp)?.roles ?? [];
-    return result(bestRoleOf(topApp), [{ appId: topApp, by: "jev" }, ...ordered(appRoles, topApp)]);
+    return result("top_app", bestRoleOf(topApp), [
+      { appId: topApp, by: "jev" },
+      ...ordered(appRoles, topApp),
+    ]);
   }
   // 5. 역할 합계
-  if (topRoleP >= t.role) return result(topRole, ordered([topRole], undefined));
+  if (topRoleP >= t.role) return result("role_sum", topRole, ordered([topRole], undefined));
   // 두 역할이 같은 1등 앱에서 나온 경우 (위 3번에서 넘어옴)
   const topRoles = m.apps.get(topApp)?.roles ?? [];
   if (
@@ -257,7 +283,10 @@ export function judgeApp(
     topRoles.includes(second[0]) &&
     topRoleP >= t.intentMin
   ) {
-    return result(bestRoleOf(topApp), [{ appId: topApp, by: "jev" }, ...ordered(topRoles, topApp)]);
+    return result("shared_roles", bestRoleOf(topApp), [
+      { appId: topApp, by: "jev" },
+      ...ordered(topRoles, topApp),
+    ]);
   }
   return fail("low");
 }
