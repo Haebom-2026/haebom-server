@@ -4,6 +4,7 @@ import {
   finalize,
   guide,
   isSecretScreen,
+  nodeTexts,
   toPromptInput,
   type GuideModel,
   type GuideModelResult,
@@ -158,7 +159,57 @@ describe("finalize", () => {
   });
 });
 
+describe("nodeTexts", () => {
+  // 에뮬레이터 설정 화면에서 본 모양: 눌리는 줄(13)에는 글자가 없고 제목·부제는 안쪽 요소에 있다
+  const settingsRow = () =>
+    request({
+      screen: {
+        pkg: "com.android.settings",
+        width: 1080,
+        height: 2220,
+        nodes: [
+          { i: 12, t: "Network & internet", b: [190, 900, 1080, 960] },
+          { i: 13, c: "android.widget.LinearLayout", b: [0, 1100, 1080, 1210], clickable: true },
+          { i: 14, t: "Dark theme, font size, brightness", b: [190, 1160, 1080, 1200] },
+          { i: 15, t: "Display", b: [190, 1110, 1080, 1155] },
+          { i: 16, d: "Display icon", b: [40, 1120, 120, 1190] },
+          { i: 17, c: "android.widget.FrameLayout", b: [0, 1300, 1080, 1400], clickable: true },
+        ],
+      },
+    });
+
+  it("자기 글자가 없으면 영역 안의 글자 중 위쪽·왼쪽 것을 쓴다", () => {
+    const texts = nodeTexts(settingsRow());
+    expect(texts.get(13)).toBe("Display");
+    expect(texts.get(15)).toBe("Display");
+  });
+
+  it("영역 안에 글자가 없거나 위치가 없으면 빈 글자", () => {
+    const texts = nodeTexts(settingsRow());
+    expect(texts.get(17)).toBe("");
+  });
+
+  it("finalize 응답의 targetText 로 이어진다", () => {
+    expect(finalize(1, output({ target: 13 }), nodeTexts(settingsRow()))).toMatchObject({
+      target: 13,
+      targetText: "Display",
+    });
+  });
+});
+
 describe("guide", () => {
+  it("노드가 0개면 모델을 부르지 않고 empty 문장", async () => {
+    const model = vi.fn<GuideModel>();
+    const empty = request();
+    empty.screen.nodes = [];
+    await expect(guide(empty, model, log)).resolves.toEqual({
+      requestId: 108,
+      type: "say",
+      say: FALLBACK_SAY.empty,
+    });
+    expect(model).not.toHaveBeenCalled();
+  });
+
   it("모델 결과를 후처리해 돌려준다", async () => {
     await expect(guide(request(), okModel(), log)).resolves.toMatchObject({
       requestId: 108,

@@ -1,7 +1,7 @@
 /**
  * #16 guide: 화면 요소 목록 → 다음 행동 하나 (docs/server-plan.md 5.3).
  *
- * 순서: 거부 규칙 → 마스킹 → 모델 호출 → 후처리 검증.
+ * 순서: 빈 화면·거부 규칙 → 마스킹 → 모델 호출 → 후처리 검증.
  * 모델이 실패·거절·시간 초과해도 앱이 그대로 읽을 수 있는 { type: "say" } 로 답한다.
  */
 import type { GuideModelOutput, GuideRequest, GuideResponse } from "./guide-schema.js";
@@ -17,6 +17,7 @@ export const FALLBACK_SAY = {
   busy: "서버가 잠시 바빠요. 조금 뒤에 다시 말씀해 주세요.",
   unsure: "제가 화면을 잘 못 알아봤어요. 다시 말씀해 주시겠어요?",
   secret: "이 화면은 직접 입력해 주세요. 제가 대신 보지 않을게요.",
+  empty: "지금 화면을 읽지 못했어요. 잠시 뒤에 다시 말씀해 주세요.",
 } as const;
 
 /** 모델에게 보내는 화면 요소: 위치를 화면 대비 % 로 바꾼 압축 형태. */
@@ -100,11 +101,43 @@ export function toPromptInput(request: GuideRequest): { input: GuidePromptInput;
 const truncate = (text: string, max: number): string =>
   text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 
-/** 요소 번호 → 그 요소의 글자 (t, 없으면 d). 응답의 targetText 에 쓴다. */
+/** 요소 번호 → 그 요소의 글자. 응답의 targetText 에 쓴다. */
 export type NodeTexts = ReadonlyMap<number, string>;
 
+type Bounds = readonly [number, number, number, number];
+
+const ownText = (node: { t?: string | undefined; d?: string | undefined }): string =>
+  (node.t ?? "").trim() || (node.d ?? "").trim();
+
+/** inner 가 outer 영역 안에 들어 있는지 (경계 몇 px 오차 허용). */
+const contains = (outer: Bounds, inner: Bounds, slack = 2): boolean =>
+  inner[0] >= outer[0] - slack &&
+  inner[1] >= outer[1] - slack &&
+  inner[2] <= outer[2] + slack &&
+  inner[3] <= outer[3] + slack;
+
+/**
+ * 요소의 글자: 자기 글자(t, 없으면 d). 없으면 **영역 안에 든 글자 요소** 중 위쪽·왼쪽 것.
+ * 설정 화면의 한 줄처럼 눌리는 틀에는 글자가 없고 제목은 안쪽 요소에 있는 경우를 위한 것
+ * (예: 틀 [13] 안의 "Display", "Dark theme, …" 중 "Display").
+ */
 export function nodeTexts(request: GuideRequest): Map<number, string> {
-  return new Map(request.screen.nodes.map((node) => [node.i, node.t ?? node.d ?? ""]));
+  const { nodes } = request.screen;
+  const labeled = nodes
+    .filter((node) => node.b !== undefined && ownText(node) !== "")
+    .sort((a, b) => (a.b?.[1] ?? 0) - (b.b?.[1] ?? 0) || (a.b?.[0] ?? 0) - (b.b?.[0] ?? 0));
+
+  return new Map(
+    nodes.map((node) => {
+      const own = ownText(node);
+      if (own !== "" || node.b === undefined) return [node.i, own];
+      const outer = node.b;
+      const inner = labeled.find(
+        (other) => other.i !== node.i && other.b !== undefined && contains(outer, other.b),
+      );
+      return [node.i, inner ? ownText(inner) : ""];
+    }),
+  );
 }
 
 const cleanText = (text: string | null | undefined): string | undefined => {
@@ -157,6 +190,12 @@ export async function guide(
 ): Promise<GuideResponse> {
   const { requestId } = request;
   const say = (text: string): GuideResponse => ({ requestId, type: "say", say: text });
+
+  // 시스템 창(밝기 막대 등)만 떠 있거나 화면을 못 읽으면 노드가 0개다. 모델이 볼 것이 없으니 부르지 않는다.
+  if (request.screen.nodes.length === 0) {
+    log.info("guide skipped", { reason: "empty-screen", pkg: request.screen.pkg });
+    return say(FALLBACK_SAY.empty);
+  }
 
   if (isSecretScreen(request)) {
     log.info("guide skipped", { reason: "secret-screen", pkg: request.screen.pkg });
