@@ -195,7 +195,10 @@ function deviceCount(x: LearnedBase): HTMLElement {
   const seed = (x.evidence ?? []).some((e) => e.endsWith("@seed"));
   return h(
     "span",
-    { class: n >= REQUIRED_DEVICES || seed ? "" : "warn-text", title: (x.devices ?? []).join(", ") },
+    {
+      class: n >= REQUIRED_DEVICES || seed ? "" : "warn-text",
+      title: (x.devices ?? []).join(", "),
+    },
     `${n}/${REQUIRED_DEVICES}`,
     seed ? " +seed" : "",
   );
