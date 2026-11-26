@@ -1,6 +1,7 @@
 /** 3. 화면 뷰어 — 노드 박스 + 번호, 노드 목록, 속성 */
 import { fpChip, h, s, time } from "../dom.ts";
 import type { ScreenDocument, ScreenNode, ScreenSummary } from "../types.ts";
+import { renderGuide } from "./guide-panel.ts";
 
 const KNOWN = new Set(["i", "t", "d", "c", "b"]);
 
@@ -164,21 +165,13 @@ export function renderScreen(
       doc.appHash ? ` · 앱 hash ${doc.appHash}` : "",
       doc.maskedCount ? h("span", { class: "tag warn" }, `마스킹 ${doc.maskedCount}`) : null,
     ),
-    doc.guide
-      ? h(
-          "div",
-          { class: "guide" },
-          h("strong", {}, "LLM 판단 "),
-          `${doc.guide.type ?? ""} → #${doc.guide.target ?? "-"} “${doc.guide.say ?? ""}”`,
-          doc.guide.latencyMs ? h("span", { class: "muted" }, ` ${doc.guide.latencyMs}ms`) : null,
-        )
-      : null,
   );
 
   return h(
     "div",
     { class: "screen-view" },
     meta,
+    doc.guide ? renderGuide(doc.guide) : null,
     h(
       "div",
       { class: "screen-body" },

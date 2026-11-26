@@ -25,6 +25,8 @@ export interface ScreenSummary {
   nodeCount: number;
   maskedCount: number;
   pinned: boolean;
+  /** guide 요청으로 저장된 화면이면 응답 type */
+  guideType?: string;
 }
 
 /** 노드 필드는 임시 (i, t, d, c, b 외에 앱이 보내는 것은 그대로 보여 준다). */
@@ -39,13 +41,7 @@ export interface ScreenNode {
 
 export interface ScreenDocument extends ScreenSummary {
   screen: { pkg: string; hash?: string; width: number; height: number; nodes: ScreenNode[] };
-  guide?: {
-    type?: string;
-    say?: string;
-    target?: number;
-    latencyMs?: number;
-    [k: string]: unknown;
-  };
+  guide?: GuideRecord;
 }
 
 export interface ScreenPage {
@@ -62,4 +58,43 @@ export interface Pin {
   createdBy: string;
   createdAt: string;
   screenCount: number;
+}
+
+/** guide 요청 기록 (src/debug/guide-trace.ts) */
+export interface GuideRecord {
+  type?: string;
+  say?: string;
+  target?: number;
+  latencyMs?: number;
+  /** 앱이 보낸 목표·한 말·slots·history */
+  request?: {
+    requestId?: number;
+    goal?: string;
+    utterance?: string;
+    slots?: Record<string, string>;
+    history?: string[];
+  };
+  /** AI 호출 과정 */
+  ai?: {
+    model?: string;
+    promptVersion?: string;
+    skipped?: string;
+    status?: string;
+    stopReason?: string | null;
+    latencyMs?: number;
+    masked?: number;
+    error?: string;
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
+    /** AI 에 보낸 그대로 */
+    input?: unknown;
+    /** 모델의 원래 출력 (후처리 전) */
+    output?: Record<string, unknown>;
+  };
+  /** 앱에 보낸 최종 응답 */
+  response?: Record<string, unknown>;
 }

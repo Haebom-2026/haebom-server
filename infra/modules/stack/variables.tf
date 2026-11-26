@@ -65,3 +65,9 @@ variable "log_retention_days" {
   type    = number
   default = 30
 }
+
+variable "ai_extra_environment" {
+  description = "ai-fn 에만 더할 환경 변수 (dev: 디버그 뷰어 기록용 DEBUG_TABLE·DEBUG_BUCKET)"
+  type        = map(string)
+  default     = {}
+}

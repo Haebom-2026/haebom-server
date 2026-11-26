@@ -77,6 +77,7 @@ function toDevice(item: Item): DeviceRecord {
 
 function toSummary(item: Item): ScreenSummary {
   const appHash = optStr(item.appHash);
+  const guideType = optStr(item.guideType);
   return {
     screenId: str(item.screenId),
     deviceId: str(item.deviceId),
@@ -89,6 +90,7 @@ function toSummary(item: Item): ScreenSummary {
     maskedCount: num(item.maskedCount),
     pinned: item.pinned === true,
     ...(appHash === undefined ? {} : { appHash }),
+    ...(guideType === undefined ? {} : { guideType }),
   };
 }
 

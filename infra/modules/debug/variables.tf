@@ -56,3 +56,9 @@ variable "firebase_web_api_key" {
   type        = string
   default     = ""
 }
+
+variable "ai_role_name" {
+  description = "guide 요청을 디버그 저장소에 기록할 ai-fn 실행 역할 이름. 비우면 권한을 붙이지 않는다."
+  type        = string
+  default     = ""
+}
