@@ -103,6 +103,14 @@ aws secretsmanager put-secret-value --region ap-northeast-2 --secret-id haebom-d
 
 등록한 뒤 서비스 계정 JSON 파일은 지운다. dev는 두 값 모두 등록돼 있다. prod는 첫 배포 뒤 `haebom-prod/...` 로 같게 등록한다.
 
+jev 앱·목표 고르기([docs/jev-routing-plan.md](docs/jev-routing-plan.md))를 쓸 때는 OpenRouter 키도 등록한다. 아직 ai-fn 이 쓰지 않으므로(`ROUTE_ENABLED=false`) 등록하지 않아도 동작에는 영향이 없다.
+
+```bash
+read -rs OPENROUTER_API_KEY && aws secretsmanager put-secret-value --region ap-northeast-2 --secret-id haebom-dev/openrouter-api-key --secret-string "$OPENROUTER_API_KEY" && unset OPENROUTER_API_KEY
+```
+
+회귀 측정(`npx tsx scripts/route-eval.ts`)은 로컬에서 환경 변수 `OPENROUTER_API_KEY` 또는 `~/.config/haebom/openrouter.key` 의 키로 jev 를 직접 부른다 (말 98개 × 지도 하나 ≈ $0.005~0.012).
+
 ## 배포 흐름
 
 | 환경 | 방법                                                               |

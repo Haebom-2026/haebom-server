@@ -32,5 +32,6 @@ module "secrets" {
   secrets = {
     "anthropic-api-key"   = "Anthropic API key used by ${local.prefix}-ai-fn"
     "fcm-service-account" = "Firebase service account JSON used by ${local.prefix}-push-fn"
+    "openrouter-api-key"  = "OpenRouter API key for jev routing used by ${local.prefix}-ai-fn"
   }
 }
