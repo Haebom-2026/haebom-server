@@ -48,6 +48,7 @@ export const NODE_STATES = [
   "selected",
   "focused",
   "secret",
+  "filled",
 ] as const;
 export const TARGET_TEXT_MAX = 100;
 
