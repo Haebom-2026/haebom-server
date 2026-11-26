@@ -9,3 +9,15 @@ output "table_name" {
 output "bucket_name" {
   value = aws_s3_bucket.debug.bucket
 }
+
+output "viewer_url" {
+  value = "https://${aws_cloudfront_distribution.viewer.domain_name}"
+}
+
+output "viewer_bucket" {
+  value = aws_s3_bucket.viewer.bucket
+}
+
+output "viewer_distribution_id" {
+  value = aws_cloudfront_distribution.viewer.id
+}

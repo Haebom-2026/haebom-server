@@ -18,7 +18,8 @@
     "dev:apply": "bash scripts/dev-deploy.sh apply",
     "dev:destroy": "bash scripts/dev-deploy.sh destroy",
     "viewer": "npm --prefix viewer run dev",
-    "viewer:mock": "npm --prefix viewer run mock"
+    "viewer:mock": "npm --prefix viewer run mock",
+    "viewer:deploy": "bash scripts/viewer-deploy.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

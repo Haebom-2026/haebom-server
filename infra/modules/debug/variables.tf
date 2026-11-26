@@ -41,3 +41,18 @@ variable "log_retention_days" {
   type    = number
   default = 14
 }
+
+variable "api_endpoint" {
+  description = "HTTP API 기본 주소 (https://...). CloudFront 가 /v1/* 를 여기로 넘긴다."
+  type        = string
+}
+
+variable "firebase_project_id" {
+  type = string
+}
+
+variable "firebase_web_api_key" {
+  description = "Firebase 웹 앱 apiKey (공개 값). 비어 있으면 뷰어가 설정 안내를 띄운다."
+  type        = string
+  default     = ""
+}
