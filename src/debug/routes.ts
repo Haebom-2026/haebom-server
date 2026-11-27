@@ -2,6 +2,7 @@
  * 디버그 뷰어 API (docs/server-plan.md 12장, dev 환경 전용).
  *   앱   : POST /v1/dev/heartbeat, POST /v1/dev/screens
  *   뷰어 : GET·PATCH /v1/dev/devices…, PUT·GET pins  (개발자 허용 목록만)
+ *          GET /v1/dev/map, GET /v1/dev/devices/{deviceId}/commands/{commandId}  (R3~R5 기록, 읽기만)
  */
 import { randomBytes, randomUUID } from "node:crypto";
 import { FINGERPRINT_VERSION, fingerprint } from "../cache/fingerprint.js";
@@ -21,6 +22,8 @@ import {
   screensQuerySchema,
 } from "./schema.js";
 import { createPageMatcher, type PreparedMatch } from "./pages.js";
+import type { MapNames } from "./command-trace.js";
+import type { InsightStore } from "./insight.js";
 import { ONLINE_WINDOW_MS, newScreenId, type DebugStore } from "./store.js";
 
 export interface DebugDeps {
@@ -30,6 +33,10 @@ export interface DebugDeps {
   now?: () => Date;
   /** 테스트용: 새 페이지 ID */
   newPageId?: () => string;
+  /** 배운 지도·명령 검토 (main 테이블 읽기). 없으면 그 두 주소는 unavailable */
+  insight?: InsightStore | undefined;
+  /** 목표·앱 이름표 (jev 지도) */
+  names?: MapNames | undefined;
 }
 
 export function parseEmailList(raw: string | undefined): Set<string> {
@@ -78,8 +85,14 @@ function validDeviceId(params: Readonly<Record<string, string>>): string {
   return result.data;
 }
 
+const COMMAND_ID = /^\d{1,15}$/;
+
 export function createDebugRoutes(deps: DebugDeps): Route[] {
   const { store, viewerEmails } = deps;
+  const insight = (): InsightStore => {
+    if (!deps.insight) throw new ApiError("unavailable", "map insight is not configured");
+    return deps.insight;
+  };
   const now = deps.now ?? (() => new Date());
   const matcher = createPageMatcher(store, deps.newPageId);
 
@@ -227,6 +240,36 @@ export function createDebugRoutes(deps: DebugDeps): Route[] {
           createdAt: now().toISOString(),
         });
         return json(201, pin);
+      },
+    },
+    {
+      method: "GET",
+      path: "/v1/dev/devices/{deviceId}/commands/{commandId}",
+      handler: async ({ event, params }) => {
+        requireViewer(event, viewerEmails);
+        const deviceId = validDeviceId(params);
+        const raw = param(params, "commandId");
+        if (!COMMAND_ID.test(raw)) throw new ApiError("invalid-argument", "invalid commandId");
+        // 명령은 uid 에 묶여 있다: 그 기기를 마지막으로 쓴 uid (가상 기기 uid-… 도 META 에 uid 가 있음)
+        const device = (await store.listDevices()).find((d) => d.deviceId === deviceId);
+        if (!device) throw new ApiError("not-found", "device not found");
+        return json(200, {
+          ...(await insight().command(device.uid, Number(raw))),
+          ...(deps.names ? { names: deps.names } : {}),
+        });
+      },
+    },
+    {
+      method: "GET",
+      path: "/v1/dev/map",
+      handler: async ({ event }) => {
+        requireViewer(event, viewerEmails);
+        const at = now();
+        return json(200, {
+          ...(await insight().learnedMap(at)),
+          ...(deps.names ? { names: deps.names } : {}),
+          serverTime: at.toISOString(),
+        });
       },
     },
     {

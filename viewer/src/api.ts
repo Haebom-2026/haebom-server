@@ -1,4 +1,5 @@
 import { idToken } from "./auth.ts";
+import type { CommandInsightView, LearnedMapView } from "./learn-types.ts";
 import { mockApi } from "./mock.ts";
 import type { CommandEntryDocument, Device, Pin, ScreenDocument, ScreenPage } from "./types.ts";
 
@@ -55,6 +56,10 @@ export interface Api {
   entry(deviceId: string, screenId: string): Promise<CommandEntryDocument>;
   pin(deviceId: string, from: string, to: string, name: string): Promise<Pin>;
   pins(): Promise<{ items: Pin[] }>;
+  /** 배운 지도 (R4·R5): 연결선·목표·도착 화면·대기·반영 */
+  learnedMap(): Promise<LearnedMapView>;
+  /** 명령 하나의 단계·끝·Opus 검토·지도 반영 (R3~R5). 기기의 uid 로 찾음 */
+  commandInsight(deviceId: string, commandId: number): Promise<CommandInsightView>;
 }
 
 const realApi: Api = {
@@ -75,6 +80,9 @@ const realApi: Api = {
   pin: (deviceId, from, to, name) =>
     request("PUT", `/v1/dev/devices/${enc(deviceId)}/pins`, { from, to, name }),
   pins: () => request("GET", "/v1/dev/pins"),
+  learnedMap: () => request("GET", "/v1/dev/map"),
+  commandInsight: (deviceId, commandId) =>
+    request("GET", `/v1/dev/devices/${enc(deviceId)}/commands/${commandId}`),
 };
 
 export const api: Api = isMock ? mockApi : realApi;

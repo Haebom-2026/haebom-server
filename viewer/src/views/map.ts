@@ -23,6 +23,7 @@ import { fpHue, h, matchLine, s, time } from "../dom.ts";
 import { RULES, isActionable, ruleKey, type RuleId } from "../fp-rules.ts";
 import { every, subscribeScreens, type Subscription } from "../subscribe.ts";
 import type { CommandEntryDocument, Device, ScreenDocument, ScreenSummary } from "../types.ts";
+import { commandInsightSection } from "./command-insight.ts";
 import { commandSummary, renderCommand } from "./command-panel.ts";
 import { renderScreen } from "./screen-panel.ts";
 
@@ -872,6 +873,7 @@ export function mapView(root: HTMLElement): () => void {
             h("div", { class: "map-panel-head" }, h("b", {}, "명령"), closeButton()),
             renderCommand(classify),
             choose ? renderCommand(choose) : "",
+            commandInsightSection(classify.deviceId, classify.command.commandId),
           );
         },
       },

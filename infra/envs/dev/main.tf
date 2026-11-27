@@ -83,3 +83,23 @@ resource "aws_iam_role_policy" "ai_map_read" {
   role   = module.stack.ai_role_name
   policy = data.aws_iam_policy_document.ai_map_read.json
 }
+
+# 디버그 뷰어 (R3~R5 기록 보기): debug-fn 이 지도(PK=MAP)와 명령 기록(ELDER#…)을 읽기만 한다
+data "aws_iam_policy_document" "debug_main_read" {
+  statement {
+    sid       = "MapAndCommandRead"
+    actions   = ["dynamodb:GetItem", "dynamodb:Query"]
+    resources = [module.stack.main_table_arn]
+    condition {
+      test     = "ForAllValues:StringLike"
+      variable = "dynamodb:LeadingKeys"
+      values   = ["MAP", "ELDER#*"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "debug_main_read" {
+  name   = "main-read"
+  role   = module.debug.role_name
+  policy = data.aws_iam_policy_document.debug_main_read.json
+}

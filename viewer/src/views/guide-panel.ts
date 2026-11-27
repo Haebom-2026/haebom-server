@@ -1,6 +1,7 @@
 /** guide 요청 상세 — 앱 요청, AI 입력·원래 출력, 최종 응답 (src/debug/guide-trace.ts) */
 import { h } from "../dom.ts";
 import type { GuideRecord } from "../types.ts";
+import { mapReason } from "./learn-labels.ts";
 
 const json = (value: unknown) =>
   h("pre", { class: "json mono small" }, JSON.stringify(value, null, 2));
@@ -111,13 +112,21 @@ export function renderGuide(guide: GuideRecord): HTMLElement {
             h("span", { class: "mono" }, `${ai.model ?? ""} · ${ai.promptVersion ?? ""}`),
           ),
           ai.skipped
-            ? row("결과", h("span", { class: "tag warn" }, `모델 호출 안 함: ${ai.skipped}`))
+            ? row(
+                "결과",
+                h(
+                  "span",
+                  { class: "tag warn" },
+                  `모델 호출 안 함: ${ai.skipped === "map" ? "지도가 안내" : ai.skipped}`,
+                ),
+              )
             : row(
                 "결과",
                 h("span", { class: `tag${statusClass}` }, ai.status ?? ""),
                 ai.stopReason ? h("span", { class: "muted small" }, ` ${ai.stopReason}`) : null,
                 ai.error ? h("span", { class: "tag warn" }, ai.error) : null,
               ),
+          ai.map ? row("지도", mapLine(ai.map)) : null,
           row("지연", ai.latencyMs !== undefined ? `${ai.latencyMs}ms` : "-"),
           row(
             "토큰",
@@ -155,5 +164,25 @@ export function renderGuide(guide: GuideRecord): HTMLElement {
           json(ai.input),
         )
       : null,
+  );
+}
+
+/** 지도 안내 판단 (R4): 지도가 안내했으면 무엇으로, Claude 로 넘겼으면 왜 */
+function mapLine(map: NonNullable<NonNullable<GuideRecord["ai"]>["map"]>): HTMLElement {
+  const fp = h("span", { class: "mono small muted", title: "지도 지문 (mfp@v1)" }, ` ${map.fp}`);
+  if (map.decision === "ai") {
+    return h("span", {}, h("span", { class: "tag" }, "Claude"), ` ${mapReason(map.reason)}`, fp);
+  }
+  const ref = map.ref
+    ? /^\d+$/.test(map.ref)
+      ? `끝 단계 ${Number(map.ref) + 1}`
+      : `연결선 ${map.ref.slice(0, 8)}`
+    : "";
+  return h(
+    "span",
+    {},
+    h("span", { class: "tag map" }, map.decision === "resend" ? "지도 · 다시 줌" : "지도"),
+    ` ${ref}`,
+    fp,
   );
 }
